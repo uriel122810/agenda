@@ -1550,8 +1550,10 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                   )}
                 </div>
               </div>
-            </div>
+            </>
           )}
+        </div>
+      )}
           {/* ══════════════ PIPELINES ══════════════ */}
           {currentView === 'pipelines' && (
             <div className="h-full flex flex-col w-full max-w-7xl mx-auto">

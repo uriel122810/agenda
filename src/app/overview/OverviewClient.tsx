@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   CheckCircle2, CalendarDays, Search, UserCircle,
-  Clock, LogOut, Plus, LayoutDashboard,
+  Clock, LogOut, Plus, LayoutDashboard, Book,
   Users, Mail, ChevronRight, Settings, ChevronDown,
   Sun, Moon, Paperclip, Send, Loader2, X,
   ChevronLeft, Shield, Trash2, UserPlus, Globe, Lock,
@@ -57,10 +57,21 @@ interface Project {
   billing_method: string;
   start_date: string | null;
   end_date: string | null;
+  estimated_delivery?: string;
+  original_delivery?: string;
   visibility: Visibility;
   creador_email: string;
   compartido_con: string[];
   creado_en: string;
+}
+
+interface ProjectDelay {
+  id: string;
+  project_id: string;
+  old_date: string;
+  new_date: string;
+  reason?: string;
+  created_at: string;
 }
 
 interface PipelineTask {
@@ -138,6 +149,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [isDark, setIsDark] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen]   = useState(false);
   const [isDropdownOpen, setIsDropdownOpen]   = useState(false);
+  const [isNotebookOpen, setIsNotebookOpen]   = useState(false);
   const [currentView, setCurrentView]         = useState('pipelines');
   const [notificationCount, setNotificationCount] = useState(0);
 
@@ -202,12 +214,13 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [pipelineTasks, setPipelineTasks] = useState<PipelineTask[]>([]);
+  const [activeProjectDelays, setActiveProjectDelays] = useState<ProjectDelay[]>([]);
   const [activeTask, setActiveTask] = useState<PipelineTask | null>(null);
   const [comments, setComments] = useState<PipelineComment[]>([]);
   
   // ── Pipelines Modals & Forms
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
-  const [newProjectData, setNewProjectData] = useState({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '' });
+  const [newProjectData, setNewProjectData] = useState({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '', estimated_delivery: '' });
   
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
   const [addTaskColumn, setAddTaskColumn] = useState('');
@@ -335,7 +348,12 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
       .order('creado_en', { ascending: false });
 
     if (data) {
-      setProjects(data as Project[]);
+      const filtered = (data as Project[]).filter(proj => 
+        proj.creador_email === userEmail ||
+        proj.visibility === 'global' ||
+        (proj.compartido_con && proj.compartido_con.includes(userEmail))
+      );
+      setProjects(filtered);
     }
   }, [supabase, userEmail]);
 
@@ -362,6 +380,22 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
       setComments(data as PipelineComment[]);
     }
   }, [supabase]);
+
+  const fetchProjectDelays = useCallback(async (projectId: string) => {
+    const { data } = await supabase
+      .from('project_delay_history')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true });
+    
+    if (data) setActiveProjectDelays(data as ProjectDelay[]);
+  }, [supabase]);
+
+  useEffect(() => {
+    if (currentView === 'dashboards' && activeProject) {
+      fetchProjectDelays(activeProject.id);
+    }
+  }, [currentView, activeProject, fetchProjectDelays]);
 
   useEffect(() => {
     fetchContacts();
@@ -429,7 +463,10 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   // ─── Pipelines Functions ──────────────────────────────────────────────────
   const handleAddProjectPipeline = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectData.title.trim() || !newProjectData.customer.trim()) return;
+    if (!newProjectData.title.trim() || !newProjectData.customer.trim() || !newProjectData.estimated_delivery) {
+      alert("Please fill all required fields including Estimated Delivery.");
+      return;
+    }
 
     const payload = {
       title: newProjectData.title,
@@ -437,6 +474,8 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
       status: newProjectData.status,
       budget_type: newProjectData.budget_type,
       billing_method: newProjectData.billing_method,
+      estimated_delivery: newProjectData.estimated_delivery,
+      original_delivery: newProjectData.estimated_delivery,
       creador_email: userEmail,
       visibility: 'personal' // Default visibility
     };
@@ -447,10 +486,39 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
       alert('Error al crear proyecto');
     } else {
       setIsAddProjectModalOpen(false);
-      setNewProjectData({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '' });
+      setNewProjectData({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '', estimated_delivery: '' });
       fetchProjects();
     }
   };
+
+  const handleUpdateProjectDelivery = async (projectId: string, oldDate: string, newDate: string) => {
+    if (!newDate || oldDate === newDate) return;
+    
+    // Update project
+    const { error: updateError } = await supabase.from('projects').update({ estimated_delivery: newDate }).eq('id', projectId);
+    if (updateError) {
+      console.error(updateError);
+      alert("Error updating project date.");
+      return;
+    }
+    
+    // Log delay
+    const { error: logError } = await supabase.from('project_delay_history').insert([{
+      project_id: projectId,
+      old_date: oldDate,
+      new_date: newDate
+    }]);
+    
+    if (logError) {
+      console.error("Warning: Could not log delay history.", logError);
+    }
+    
+    fetchProjects();
+    if (activeProject && activeProject.id === projectId) {
+      setActiveProject({ ...activeProject, estimated_delivery: newDate });
+    }
+  };
+
 
   const handleAddTaskPipeline = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1077,6 +1145,14 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             </div>
 
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsNotebookOpen(true)}
+                title="Abrir Libreta de Notas"
+                className={`relative p-2 rounded-lg transition-colors ${t.mutedText} hover:text-[#6b1c35] ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}
+              >
+                <Book size={20} />
+              </button>
+
               {/* Notification Bell -> Redirects to Gmail & Shows Badge */}
               <button 
                 onClick={handleOpenGmail}
@@ -1328,45 +1404,118 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             </div>
           )}
 
-          {/* ══════════════ DASHBOARDS (IA) ══════════════ */}
+          {/* ══════════════ DASHBOARDS ══════════════ */}
           {currentView === 'dashboards' && (
             <div className="h-full flex flex-col gap-6 max-w-5xl mx-auto w-full">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-[#6b1c35]'}`}>Procesador de Minutas con IA</h2>
-                  <p className={`${t.mutedText} text-sm mt-1`}>Sube archivos de reuniones para generar síntesis y gráficas automáticas.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6 lg:col-span-1 h-fit`}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <UploadCloud size={20} className="text-[#b39656]" />
-                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Subir Archivo</h3>
-                  </div>
-                  <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                    isProcessingAI ? 'border-slate-300 bg-slate-50' : 'border-[#b39656]/30 hover:bg-[#b39656]/5'
-                  }`}>
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      {isProcessingAI ? (
-                        <>
-                          <Loader2 size={24} className="text-[#b39656] animate-spin mb-2" />
-                          <p className="text-sm font-semibold text-slate-500">Analizando con IA...</p>
-                        </>
-                      ) : (
-                        <>
-                          <FileText size={24} className="text-[#b39656] mb-2" />
-                          <p className="text-sm font-semibold text-[#6b1c35]">Seleccionar o arrastrar</p>
-                          <p className="text-xs text-slate-400 mt-1">.txt, .md, .csv</p>
-                        </>
-                      )}
+              {activeProject ? (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-[#6b1c35]'}`}>Dashboard: {activeProject.title}</h2>
+                      <p className={`${t.mutedText} text-sm mt-1`}>Rendimiento y Carga de Trabajo</p>
                     </div>
-                    <input type="file" accept=".txt,.md,.csv" className="hidden" onChange={handleUploadAndProcess} disabled={isProcessingAI} />
-                  </label>
-                  {aiError && <p className="text-xs text-red-500 mt-3 font-semibold">{aiError}</p>}
-                </div>
+                    <button onClick={() => setCurrentView('pipelines')} className={`p-2 rounded-lg ${t.calHover} ${t.mutedText} transition-colors flex items-center gap-1 font-bold`}><ChevronLeft size={20} /> Volver</button>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6`}>
+                      <h3 className={`text-sm font-black uppercase tracking-widest text-[#6b1c35] mb-6`}>Historial de Postergaciones</h3>
+                      <div className="h-64 w-full">
+                        {activeProjectDelays.length === 0 ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                            <CheckCircle2 size={32} className="mb-2 text-emerald-500" />
+                            <p className="text-sm font-medium">No hay postergaciones.</p>
+                          </div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={activeProjectDelays.map((d, i) => ({ name: `Mod #${i+1}`, old: new Date(d.old_date).getTime(), new: new Date(d.new_date).getTime() }))}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} vertical={false} />
+                              <XAxis dataKey="name" stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={12} tickLine={false} axisLine={false} />
+                              <YAxis domain={['auto', 'auto']} stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => new Date(val).toLocaleDateString()} />
+                              <Tooltip 
+                                contentStyle={{ backgroundColor: isDark ? '#1e293b' : '#ffffff', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: '8px' }}
+                                labelStyle={{ color: '#b39656', fontWeight: 'bold' }}
+                                formatter={(val: number) => new Date(val).toLocaleDateString()}
+                              />
+                              <Bar dataKey="old" fill="#94a3b8" radius={[4, 4, 0, 0]} name="Anterior" />
+                              <Bar dataKey="new" fill="#6b1c35" radius={[4, 4, 0, 0]} name="Nueva" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6`}>
+                      <h3 className={`text-sm font-black uppercase tracking-widest text-[#6b1c35] mb-6`}>Carga de Trabajo por Usuario</h3>
+                      <div className="h-64 w-full">
+                        {pipelineTasks.length === 0 ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                            <Users size={32} className="mb-2" />
+                            <p className="text-sm font-medium">No hay tareas asignadas.</p>
+                          </div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={
+                              Object.entries(
+                                pipelineTasks.reduce((acc, task) => {
+                                  const user = task.assignee_email || 'Sin asignar';
+                                  acc[user] = (acc[user] || 0) + 1;
+                                  return acc;
+                                }, {} as Record<string, number>)
+                              ).map(([name, count]) => ({ name: name.split('@')[0], count }))
+                            }>
+                              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} vertical={false} />
+                              <XAxis dataKey="name" stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={12} tickLine={false} axisLine={false} />
+                              <YAxis allowDecimals={false} stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={12} tickLine={false} axisLine={false} />
+                              <Tooltip 
+                                contentStyle={{ backgroundColor: isDark ? '#1e293b' : '#ffffff', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: '8px' }}
+                                itemStyle={{ color: '#b39656', fontWeight: 'bold' }}
+                              />
+                              <Bar dataKey="count" fill="#b39656" radius={[4, 4, 0, 0]} name="Tareas" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-[#6b1c35]'}`}>Procesador de Minutas con IA</h2>
+                      <p className={`${t.mutedText} text-sm mt-1`}>Sube archivos de reuniones para generar síntesis y gráficas automáticas.</p>
+                    </div>
+                  </div>
 
-                <div className="lg:col-span-2 space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6 lg:col-span-1 h-fit`}>
+                      <div className="flex items-center gap-2 mb-4">
+                        <UploadCloud size={20} className="text-[#b39656]" />
+                        <h3 className={`font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Subir Archivo</h3>
+                      </div>
+                      <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                        isProcessingAI ? 'border-slate-300 bg-slate-50' : 'border-[#b39656]/30 hover:bg-[#b39656]/5'
+                      }`}>
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          {isProcessingAI ? (
+                            <>
+                              <Loader2 size={24} className="text-[#b39656] animate-spin mb-2" />
+                              <p className="text-sm font-semibold text-slate-500">Analizando con IA...</p>
+                            </>
+                          ) : (
+                            <>
+                              <FileText size={24} className="text-[#b39656] mb-2" />
+                              <p className="text-sm font-semibold text-[#6b1c35]">Seleccionar o arrastrar</p>
+                              <p className="text-xs text-slate-400 mt-1">.txt, .md, .csv</p>
+                            </>
+                          )}
+                        </div>
+                        <input type="file" accept=".txt,.md,.csv" className="hidden" onChange={handleUploadAndProcess} disabled={isProcessingAI} />
+                      </label>
+                      {aiError && <p className="text-xs text-red-500 mt-3 font-semibold">{aiError}</p>}
+                    </div>
+
+                    <div className="lg:col-span-2 space-y-6">
                   {aiData ? (
                     <>
                       <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6`}>
@@ -1449,11 +1598,34 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                 </>
               ) : (
                 <>
-                  <div className="flex items-center gap-4 mb-6">
-                    <button onClick={() => { setActiveProject(null); setActiveTask(null); }} className={`p-2 rounded-lg ${t.calHover} ${t.mutedText} transition-colors`}><ChevronLeft size={24} /></button>
-                    <div>
-                      <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{activeProject.title}</h2>
-                      <p className={`text-xs font-medium ${t.mutedText}`}>{activeProject.customer}</p>
+                  <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-4">
+                      <button onClick={() => { setActiveProject(null); setActiveTask(null); }} className={`p-2 rounded-lg ${t.calHover} ${t.mutedText} transition-colors`}><ChevronLeft size={24} /></button>
+                      <div>
+                        <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{activeProject.title}</h2>
+                        <p className={`text-xs font-medium ${t.mutedText}`}>{activeProject.customer}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <label className={`text-xs font-bold ${t.mutedText} uppercase`}>Est. Delivery:</label>
+                        <input 
+                          type="date"
+                          value={activeProject.estimated_delivery ? new Date(activeProject.estimated_delivery).toISOString().split('T')[0] : ''}
+                          onChange={(e) => {
+                            const newDateStr = e.target.value;
+                            if (!newDateStr) return;
+                            const newDate = new Date(newDateStr).toISOString();
+                            if (activeProject.estimated_delivery !== newDate) {
+                              handleUpdateProjectDelivery(activeProject.id, activeProject.estimated_delivery || new Date().toISOString(), newDate);
+                            }
+                          }}
+                          className={`${INPUT} py-1.5 px-3 max-w-[150px]`}
+                        />
+                      </div>
+                      <button onClick={() => setCurrentView('dashboards')} className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                        <LayoutDashboard size={16} /> Dashboard
+                      </button>
                     </div>
                   </div>
                   
@@ -1634,6 +1806,10 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Billing Method</label>
                       <input type="text" value={newProjectData.billing_method} onChange={e => setNewProjectData({...newProjectData, billing_method: e.target.value})} className={INPUT} />
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Estimated Delivery *</label>
+                    <input type="date" value={newProjectData.estimated_delivery} onChange={e => setNewProjectData({...newProjectData, estimated_delivery: e.target.value})} className={INPUT} required />
                   </div>
                   <div className="pt-4 flex justify-end">
                     <button type="submit" className="bg-green-500 hover:bg-green-600 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors">
@@ -2134,6 +2310,61 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ══════════════════════════════════════════════════════
+          NOTEBOOK / AGENDA SLIDE-OVER
+      ══════════════════════════════════════════════════════ */}
+      {isNotebookOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsNotebookOpen(false)}>
+          <div className={`w-full max-w-md h-full shadow-2xl border-l flex flex-col ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`} onClick={e => e.stopPropagation()}>
+            <div className={`px-6 py-5 border-b flex justify-between items-center ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <div className="flex items-center gap-3">
+                <Book size={20} className="text-[#b39656]" />
+                <h3 className={`text-lg font-extrabold ${isDark ? 'text-white' : 'text-slate-800'}`}>Libreta Rápida</h3>
+              </div>
+              <button onClick={() => setIsNotebookOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {checklists.map(item => (
+                <div key={item.id} className={`flex items-start gap-3 p-4 rounded-xl border shadow-sm transition-all group ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'} ${item.estatus === 'completado' ? 'opacity-60' : ''}`}>
+                  <button onClick={() => handleUpdateStatus(item.id, item.estatus === 'completado' ? 'pendiente' : 'completado')} className={`mt-0.5 flex-shrink-0 ${item.estatus === 'completado' ? 'text-emerald-500' : 'text-slate-300 hover:text-slate-400'}`}>
+                    <CheckCircle2 size={18} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold break-words ${isDark ? 'text-slate-200' : 'text-slate-700'} ${item.estatus === 'completado' ? 'line-through text-slate-400' : ''}`}>
+                      {item.titulo}
+                    </p>
+                  </div>
+                  <button onClick={(e) => openDeleteModal(item.id, 'checklist', item.titulo, e)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-colors p-1">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              {checklists.length === 0 && (
+                <div className="text-center py-10 text-slate-400">
+                  <Book size={32} className="mx-auto mb-3 opacity-50" />
+                  <p className="font-semibold text-sm">Tu libreta está vacía.</p>
+                  <p className="text-xs mt-1">Añade recordatorios rápidos abajo.</p>
+                </div>
+              )}
+            </div>
+            <div className={`p-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <form onSubmit={handleAddProject} className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={projectTitle} 
+                  onChange={e => setProjectTitle(e.target.value)}
+                  placeholder="Escribe un recordatorio..." 
+                  className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#b39656] ${isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-200 text-black placeholder-slate-400 border'}`}
+                  disabled={isSubmittingProject}
+                />
+                <button type="submit" disabled={!projectTitle.trim() || isSubmittingProject} className="bg-[#b39656] hover:bg-[#8f7743] text-white px-4 py-2.5 rounded-lg disabled:opacity-50 transition-colors">
+                  <Plus size={18} />
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

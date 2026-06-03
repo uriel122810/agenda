@@ -274,11 +274,31 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
     // Supabase Realtime for instant synchronization across clients
     const channel = supabase
       .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklists' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklists' }, (payload) => {
         fetchChecklists();
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newRecord = payload.new as any;
+          if (
+            newRecord.creador_email !== userEmail &&
+            (newRecord.visibilidad === 'global' ||
+              (newRecord.compartido_con && newRecord.compartido_con.includes(userEmail)))
+          ) {
+            setNotificationCount((prev) => prev + 1);
+          }
+        }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agenda' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agenda' }, (payload) => {
         fetchAgenda();
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newRecord = payload.new as any;
+          if (
+            newRecord.creador_email !== userEmail &&
+            (newRecord.visibilidad === 'global' ||
+              (newRecord.compartido_con && newRecord.compartido_con.includes(userEmail)))
+          ) {
+            setNotificationCount((prev) => prev + 1);
+          }
+        }
       })
       .subscribe();
 

@@ -9,8 +9,9 @@ import {
   Users, Mail, ChevronRight, Settings, ChevronDown,
   Sun, Moon, Paperclip, Send, Loader2, X,
   ChevronLeft, Shield, Trash2, UserPlus, Globe, Lock,
-  Bell, FileText, Image as ImageIcon
+  Bell, FileText, Image as ImageIcon, UploadCloud
 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ChecklistStatus  = 'pendiente' | 'en_progreso' | 'completado';
@@ -154,6 +155,11 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [emailStatus,  setEmailStatus]  = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [emailError,   setEmailError]   = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  // ── IA Dashboard State
+  const [aiData, setAiData] = useState<{ resumenEjecutivo: string, datosGraficos: any[] } | null>(null);
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   // ── Calendar navigation
   const [calYear,  setCalYear]  = useState(new Date().getFullYear());
@@ -607,6 +613,43 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
     } catch (err: any) {
       setEmailError(err.message);
       setEmailStatus('error');
+    }
+  };
+
+  const handleUploadAndProcess = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessingAI(true);
+    setAiError('');
+    setAiData(null);
+
+    try {
+      const fileName = `${Date.now()}_${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('reuniones-y-trabajos')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('procesar-ia', {
+        body: { storagePath: fileName }
+      });
+
+      if (fnError) throw fnError;
+      
+      if (fnData && fnData.resumenEjecutivo && fnData.datosGraficos) {
+        setAiData(fnData);
+      } else {
+        throw new Error('Formato de respuesta inválido de la IA');
+      }
+
+    } catch (error: any) {
+      console.error('Error al procesar IA:', error);
+      setAiError(error.message || 'Ocurrió un error al procesar el archivo.');
+    } finally {
+      setIsProcessingAI(false);
+      e.target.value = ''; // Reset file input
     }
   };
 
@@ -1073,12 +1116,79 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             </div>
           )}
 
-          {/* ══════════════ DASHBOARDS (placeholder) ══════════════ */}
+          {/* ══════════════ DASHBOARDS (IA) ══════════════ */}
           {currentView === 'dashboards' && (
-            <div className="flex flex-col items-center justify-center h-64">
-              <LayoutDashboard size={44} className={`${t.mutedText} mb-4`} />
-              <h3 className={`text-lg font-bold ${t.mutedText}`}>Dashboards en Desarrollo</h3>
-              <p className={`text-sm ${t.mutedText} mt-1`}>Próximamente métricas y reportes interactivos.</p>
+            <div className="h-full flex flex-col gap-6 max-w-5xl mx-auto w-full">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-[#6b1c35]'}`}>Procesador de Minutas con IA</h2>
+                  <p className={`${t.mutedText} text-sm mt-1`}>Sube archivos de reuniones para generar síntesis y gráficas automáticas.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6 lg:col-span-1 h-fit`}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <UploadCloud size={20} className="text-[#b39656]" />
+                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Subir Archivo</h3>
+                  </div>
+                  <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                    isProcessingAI ? 'border-slate-300 bg-slate-50' : 'border-[#b39656]/30 hover:bg-[#b39656]/5'
+                  }`}>
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      {isProcessingAI ? (
+                        <>
+                          <Loader2 size={24} className="text-[#b39656] animate-spin mb-2" />
+                          <p className="text-sm font-semibold text-slate-500">Analizando con IA...</p>
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={24} className="text-[#b39656] mb-2" />
+                          <p className="text-sm font-semibold text-[#6b1c35]">Seleccionar o arrastrar</p>
+                          <p className="text-xs text-slate-400 mt-1">.txt, .md, .csv</p>
+                        </>
+                      )}
+                    </div>
+                    <input type="file" accept=".txt,.md,.csv" className="hidden" onChange={handleUploadAndProcess} disabled={isProcessingAI} />
+                  </label>
+                  {aiError && <p className="text-xs text-red-500 mt-3 font-semibold">{aiError}</p>}
+                </div>
+
+                <div className="lg:col-span-2 space-y-6">
+                  {aiData ? (
+                    <>
+                      <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6`}>
+                        <h3 className={`text-sm font-black uppercase tracking-widest text-[#6b1c35] mb-3`}>Síntesis de IA</h3>
+                        <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{aiData.resumenEjecutivo}</p>
+                      </div>
+
+                      <div className={`${t.cardBg} border ${t.cardBorder} rounded-2xl shadow-sm p-6`}>
+                        <h3 className={`text-sm font-black uppercase tracking-widest text-[#6b1c35] mb-6`}>Métricas Extraídas</h3>
+                        <div className="h-64 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={aiData.datosGraficos}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} vertical={false} />
+                              <XAxis dataKey="nombre" stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={12} tickLine={false} axisLine={false} />
+                              <YAxis stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={12} tickLine={false} axisLine={false} />
+                              <Tooltip 
+                                contentStyle={{ backgroundColor: isDark ? '#1e293b' : '#ffffff', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: '8px' }}
+                                itemStyle={{ color: '#b39656', fontWeight: 'bold' }}
+                                cursor={{ fill: isDark ? '#334155' : '#f1f5f9' }}
+                              />
+                              <Bar dataKey="valor" fill="#6b1c35" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className={`h-full flex flex-col items-center justify-center p-12 text-center border-2 border-dashed ${t.cardBorder} rounded-2xl`}>
+                      <LayoutDashboard size={40} className="text-slate-300 mb-3" />
+                      <p className={`text-sm font-semibold ${t.mutedText}`}>Sube un archivo para visualizar las métricas y la síntesis generada por la IA.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

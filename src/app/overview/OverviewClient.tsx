@@ -397,8 +397,6 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             setNotificationCount((prev) => prev + 1);
           }
         }
-          }
-        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchProjects())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {

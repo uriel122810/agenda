@@ -48,6 +48,43 @@ interface ContactUser {
   role?: UserRole;
 }
 
+interface Project {
+  id: string;
+  title: string;
+  customer: string;
+  status: string;
+  budget_type: string;
+  billing_method: string;
+  start_date: string | null;
+  end_date: string | null;
+  visibility: Visibility;
+  creador_email: string;
+  compartido_con: string[];
+  creado_en: string;
+}
+
+interface PipelineTask {
+  id: string;
+  project_id: string;
+  column_name: string;
+  title: string;
+  description: string | null;
+  assignee_email: string | null;
+  status: string;
+  due_date: string | null;
+  priority: string;
+  creador_email: string;
+  creado_en: string;
+}
+
+interface PipelineComment {
+  id: string;
+  task_id: string;
+  user_email: string;
+  content: string;
+  creado_en: string;
+}
+
 const STATUS_LABELS: Record<ChecklistStatus, string> = {
   pendiente:  'Pendiente',
   en_progreso:'Trabajando',
@@ -161,6 +198,23 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [aiError, setAiError] = useState('');
 
+  // ── Pipelines State
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [pipelineTasks, setPipelineTasks] = useState<PipelineTask[]>([]);
+  const [activeTask, setActiveTask] = useState<PipelineTask | null>(null);
+  const [comments, setComments] = useState<PipelineComment[]>([]);
+  
+  // ── Pipelines Modals & Forms
+  const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+  const [newProjectData, setNewProjectData] = useState({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '' });
+  
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [addTaskColumn, setAddTaskColumn] = useState('');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  
+  const [newComment, setNewComment] = useState('');
+
   // ── Calendar navigation
   const [calYear,  setCalYear]  = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
@@ -272,10 +326,48 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
     setAgenda(combined);
   }, [supabase, userEmail]);
 
+  // ── Pipelines Fetchers
+  const fetchProjects = useCallback(async () => {
+    if (!userEmail) return;
+    const { data } = await supabase
+      .from('projects')
+      .select('*')
+      .order('creado_en', { ascending: false });
+
+    if (data) {
+      setProjects(data as Project[]);
+    }
+  }, [supabase, userEmail]);
+
+  const fetchPipelineTasks = useCallback(async (projectId: string) => {
+    const { data } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('creado_en', { ascending: true });
+
+    if (data) {
+      setPipelineTasks(data as PipelineTask[]);
+    }
+  }, [supabase]);
+
+  const fetchComments = useCallback(async (taskId: string) => {
+    const { data } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('creado_en', { ascending: true });
+
+    if (data) {
+      setComments(data as PipelineComment[]);
+    }
+  }, [supabase]);
+
   useEffect(() => {
     fetchContacts();
     fetchChecklists();
     fetchAgenda();
+    fetchProjects();
 
     // Supabase Realtime for instant synchronization across clients
     const channel = supabase
@@ -305,13 +397,135 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             setNotificationCount((prev) => prev + 1);
           }
         }
+          }
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchProjects())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+        if (activeProject) fetchPipelineTasks(activeProject.id);
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newRecord = payload.new as any;
+          // Reverse Notification Fix for tasks
+          if (newRecord.creador_email !== userEmail) {
+            setNotificationCount((prev) => prev + 1);
+          }
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, (payload) => {
+        if (activeTask) fetchComments(activeTask.id);
+        if (payload.eventType === 'INSERT') {
+          const newRecord = payload.new as any;
+          // Reverse Notification Fix for comments
+          if (newRecord.user_email !== userEmail) {
+            setNotificationCount((prev) => prev + 1);
+          }
+        }
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchContacts, fetchChecklists, fetchAgenda, supabase]);
+  }, [fetchContacts, fetchChecklists, fetchAgenda, fetchProjects, fetchPipelineTasks, fetchComments, activeProject, activeTask, supabase, userEmail]);
+
+  // ─── Pipelines Functions ──────────────────────────────────────────────────
+  const handleAddProjectPipeline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectData.title.trim() || !newProjectData.customer.trim()) return;
+
+    const payload = {
+      title: newProjectData.title,
+      customer: newProjectData.customer,
+      status: newProjectData.status,
+      budget_type: newProjectData.budget_type,
+      billing_method: newProjectData.billing_method,
+      creador_email: userEmail,
+      visibility: 'personal' // Default visibility
+    };
+
+    const { error } = await supabase.from('projects').insert([payload]);
+    if (error) {
+      console.error(error);
+      alert('Error al crear proyecto');
+    } else {
+      setIsAddProjectModalOpen(false);
+      setNewProjectData({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '' });
+      fetchProjects();
+    }
+  };
+
+  const handleAddTaskPipeline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !activeProject) return;
+
+    const payload = {
+      project_id: activeProject.id,
+      column_name: addTaskColumn,
+      title: newTaskTitle,
+      status: 'pending',
+      priority: 'Medium',
+      creador_email: userEmail
+    };
+
+    const { error } = await supabase.from('tasks').insert([payload]);
+    if (error) {
+      console.error(error);
+      alert('Error al crear tarea');
+    } else {
+      setIsAddTaskModalOpen(false);
+      setNewTaskTitle('');
+      fetchPipelineTasks(activeProject.id);
+    }
+  };
+
+  const handleUpdateTaskPipeline = async (taskId: string, updates: Partial<PipelineTask>) => {
+    const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
+    if (error) {
+      console.error(error);
+      alert('Error al actualizar tarea');
+    } else {
+      if (activeProject) fetchPipelineTasks(activeProject.id);
+      if (activeTask) setActiveTask(prev => prev ? { ...prev, ...updates } : null);
+    }
+  };
+
+  const handleAddCommentPipeline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || !activeTask) return;
+
+    const payload = {
+      task_id: activeTask.id,
+      user_email: userEmail,
+      content: newComment
+    };
+
+    const { error } = await supabase.from('comments').insert([payload]);
+    if (error) {
+      console.error(error);
+      alert('Error al enviar comentario');
+    } else {
+      setNewComment('');
+      fetchComments(activeTask.id);
+    }
+  };
+
+  const handleAIAssistant = async (texto: string, accion: string, onResult: (res: string) => void) => {
+    try {
+      const payloadText = `Acción solicitada: ${accion}\n\nTexto original u orden:\n${texto}\n\nInstrucción estricta: Ignora que eres un analizador de minutas si la acción es diferente. Usa la clave "resumenEjecutivo" del JSON para devolver la respuesta a esta solicitud.`;
+      const { data, error } = await supabase.functions.invoke('procesar-ia', {
+        body: { text: payloadText }
+      });
+      if (error) throw error;
+      if (data && data.resumenEjecutivo) {
+        onResult(data.resumenEjecutivo);
+      } else {
+        alert('Respuesta de IA vacía o incorrecta.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de IA');
+    }
+  };
 
   // ─── Checklists ───────────────────────────────────────────────────────────
   const handleUpdateStatus = async (id: string, newStatus: ChecklistStatus) => {
@@ -1191,6 +1405,92 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
               </div>
             </div>
           )}
+          {/* ══════════════ PIPELINES ══════════════ */}
+          {currentView === 'pipelines' && (
+            <div className="h-full flex flex-col w-full max-w-7xl mx-auto">
+              {!activeProject ? (
+                <>
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-[#6b1c35]'}`}>Projects</h2>
+                      <p className={`${t.mutedText} text-sm mt-1`}>Manage your production pipelines.</p>
+                    </div>
+                    <button onClick={() => setIsAddProjectModalOpen(true)} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                      <Plus size={16} /> Add Project
+                    </button>
+                  </div>
+                  <div className={`overflow-x-auto ${t.cardBg} rounded-xl border ${t.cardBorder}`}>
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className={`border-b ${t.cardBorder} ${t.tableTh}`}>
+                        <tr>
+                          <th className="py-3 px-4 font-bold text-slate-500">Title</th>
+                          <th className="py-3 px-4 font-bold text-slate-500">Customer</th>
+                          <th className="py-3 px-4 font-bold text-slate-500">Status</th>
+                          <th className="py-3 px-4 font-bold text-slate-500">Visibility</th>
+                          <th className="py-3 px-4 font-bold text-slate-500">Start Date</th>
+                          <th className="py-3 px-4 font-bold text-slate-500">End Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {projects.map(proj => (
+                          <tr key={proj.id} onClick={() => { setActiveProject(proj); fetchPipelineTasks(proj.id); }} className={`cursor-pointer ${t.tableHover} transition-colors`}>
+                            <td className="py-4 px-4 font-bold text-slate-800 dark:text-slate-200">{proj.title}</td>
+                            <td className="py-4 px-4 text-slate-500">{proj.customer}</td>
+                            <td className="py-4 px-4"><span className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-semibold">{proj.status}</span></td>
+                            <td className="py-4 px-4 text-slate-400"><Globe size={14}/></td>
+                            <td className="py-4 px-4 text-slate-500">{proj.start_date ? new Date(proj.start_date).toLocaleDateString() : '-'}</td>
+                            <td className="py-4 px-4 text-slate-500">{proj.end_date ? new Date(proj.end_date).toLocaleDateString() : '-'}</td>
+                          </tr>
+                        ))}
+                        {projects.length === 0 && (
+                          <tr><td colSpan={6} className="py-8 text-center text-slate-400 font-medium">No hay proyectos. Crea uno nuevo.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 mb-6">
+                    <button onClick={() => { setActiveProject(null); setActiveTask(null); }} className={`p-2 rounded-lg ${t.calHover} ${t.mutedText} transition-colors`}><ChevronLeft size={24} /></button>
+                    <div>
+                      <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{activeProject.title}</h2>
+                      <p className={`text-xs font-medium ${t.mutedText}`}>{activeProject.customer}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4 h-[calc(100vh-200px)] overflow-x-auto pb-4 items-start">
+                    {['Story Board', 'Character Design', 'Final Composition'].map(col => {
+                      const colTasks = pipelineTasks.filter(t => t.column_name === col);
+                      return (
+                        <div key={col} className={`min-w-[320px] max-w-[320px] rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 border ${t.cardBorder} flex flex-col max-h-full`}>
+                          <div className="flex justify-between items-center mb-3 px-1">
+                            <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200">{col} <span className="text-xs text-slate-400 ml-1 bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">{colTasks.length}</span></h3>
+                            <button onClick={() => { setAddTaskColumn(col); setIsAddTaskModalOpen(true); }} className="text-slate-400 hover:text-green-500 transition-colors"><Plus size={18}/></button>
+                          </div>
+                          
+                          <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
+                            {colTasks.map(task => (
+                              <div key={task.id} onClick={() => { setActiveTask(task); fetchComments(task.id); }} className={`${t.cardBg} border ${t.cardBorder} p-3.5 rounded-lg shadow-sm cursor-pointer hover:shadow-md hover:border-slate-300 transition-all group`}>
+                                <h4 className={`font-semibold text-sm mb-3 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{task.title}</h4>
+                                <div className="flex justify-between items-center text-xs text-slate-500">
+                                  <span className="flex items-center gap-1 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded"><CalendarDays size={12}/> {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}</span>
+                                  <span className={`px-2 py-0.5 rounded-full font-bold ${task.priority === 'High' ? 'bg-red-100 text-red-600' : task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'}`}>{task.priority}</span>
+                                </div>
+                              </div>
+                            ))}
+                            <button onClick={() => { setAddTaskColumn(col); setIsAddTaskModalOpen(true); }} className="w-full py-2.5 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:border-slate-300 hover:bg-white dark:hover:bg-slate-800 flex items-center justify-center gap-1 text-sm font-semibold transition-all">
+                              <Plus size={16}/> Add Task
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* ══════════════ MENSAJES — GMAIL CLIENT ══════════════ */}
           {currentView === 'mensajes' && (
@@ -1304,6 +1604,197 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
               </div>
             </div>
           )}
+          {/* ══════════════════════════════════════════════════════
+              PIPELINES MODALS
+          ══════════════════════════════════════════════════════ */}
+          {isAddProjectModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <div className={`${t.cardBg} rounded-xl shadow-2xl border ${t.cardBorder} w-full max-w-lg overflow-hidden`}>
+                <div className={`px-6 py-4 border-b ${t.cardBorder} flex justify-between items-center`}>
+                  <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Add Project</h3>
+                  <button onClick={() => setIsAddProjectModalOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleAddProjectPipeline} className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name *</label>
+                    <input type="text" value={newProjectData.title} onChange={e => setNewProjectData({...newProjectData, title: e.target.value})} className={INPUT} required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Customer *</label>
+                    <input type="text" value={newProjectData.customer} onChange={e => setNewProjectData({...newProjectData, customer: e.target.value})} className={INPUT} required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
+                    <input type="text" value={newProjectData.status} onChange={e => setNewProjectData({...newProjectData, status: e.target.value})} className={INPUT} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Budget Type</label>
+                      <input type="text" value={newProjectData.budget_type} onChange={e => setNewProjectData({...newProjectData, budget_type: e.target.value})} className={INPUT} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Billing Method</label>
+                      <input type="text" value={newProjectData.billing_method} onChange={e => setNewProjectData({...newProjectData, billing_method: e.target.value})} className={INPUT} />
+                    </div>
+                  </div>
+                  <div className="pt-4 flex justify-end">
+                    <button type="submit" className="bg-green-500 hover:bg-green-600 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors">
+                      Create Project
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {isAddTaskModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <div className={`${t.cardBg} rounded-xl shadow-2xl border ${t.cardBorder} w-full max-w-sm overflow-hidden`}>
+                <div className={`px-6 py-4 border-b ${t.cardBorder} flex justify-between items-center`}>
+                  <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Add Task to {addTaskColumn}</h3>
+                  <button onClick={() => setIsAddTaskModalOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleAddTaskPipeline} className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Task Title *</label>
+                    <input type="text" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} className={INPUT} required />
+                  </div>
+                  <div className="pt-2 flex justify-end">
+                    <button type="submit" className="bg-green-500 hover:bg-green-600 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors">
+                      Add Task
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {activeTask && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <div className={`${t.cardBg} rounded-xl shadow-2xl border ${t.cardBorder} w-full max-w-5xl h-[80vh] flex overflow-hidden`}>
+                {/* Left Panel: Task Details */}
+                <div className={`w-3/5 p-8 overflow-y-auto border-r ${t.cardBorder}`}>
+                  <div className="flex justify-between items-start mb-6">
+                    <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-slate-800'}`}>{activeTask.title}</h2>
+                  </div>
+                  <div className="grid grid-cols-2 gap-6 mb-8">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Assign To</label>
+                      <select 
+                        value={activeTask.assignee_email || ''} 
+                        onChange={e => handleUpdateTaskPipeline(activeTask.id, { assignee_email: e.target.value })}
+                        className={INPUT}
+                      >
+                        <option value="">Unassigned</option>
+                        {contacts.map(c => <option key={c.email} value={c.email || ''}>{c.name || c.email}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Status</label>
+                      <select 
+                        value={activeTask.status} 
+                        onChange={e => handleUpdateTaskPipeline(activeTask.id, { status: e.target.value })}
+                        className={INPUT}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="done">Done</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Due Date</label>
+                      <input 
+                        type="date" 
+                        value={activeTask.due_date ? new Date(activeTask.due_date).toISOString().split('T')[0] : ''} 
+                        onChange={e => handleUpdateTaskPipeline(activeTask.id, { due_date: new Date(e.target.value).toISOString() })}
+                        className={INPUT}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Priority</label>
+                      <select 
+                        value={activeTask.priority} 
+                        onChange={e => handleUpdateTaskPipeline(activeTask.id, { priority: e.target.value })}
+                        className={INPUT}
+                      >
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-slate-500 uppercase">Description</label>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => handleAIAssistant(activeTask.description || activeTask.title, "Mejorar redacción de la descripción", (res) => handleUpdateTaskPipeline(activeTask.id, { description: res }))}
+                          className="text-xs font-bold text-[#b39656] hover:text-[#6b1c35] flex items-center gap-1 bg-[#b39656]/10 px-2 py-1 rounded"
+                        >
+                          <Sun size={12} /> Mejorar con IA
+                        </button>
+                      </div>
+                    </div>
+                    <textarea 
+                      value={activeTask.description || ''} 
+                      onChange={e => handleUpdateTaskPipeline(activeTask.id, { description: e.target.value })}
+                      placeholder="Añade una descripción..."
+                      className={`${INPUT} min-h-[150px] resize-y`}
+                    />
+                  </div>
+                </div>
+                
+                {/* Right Panel: Comments Chat */}
+                <div className="w-2/5 flex flex-col bg-slate-50 dark:bg-slate-900/50">
+                  <div className={`p-4 border-b ${t.cardBorder} flex justify-between items-center bg-white dark:bg-slate-900`}>
+                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Comments</h3>
+                    <button onClick={() => setActiveTask(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {comments.map(comment => (
+                      <div key={comment.id} className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center font-bold text-slate-500 text-xs">
+                          {comment.user_email.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-baseline gap-2 mb-1">
+                            <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{comment.user_email.split('@')[0]}</span>
+                            <span className="text-[10px] text-slate-400">{new Date(comment.creado_en).toLocaleTimeString()}</span>
+                          </div>
+                          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {comments.length === 0 && <p className="text-center text-sm text-slate-400 mt-10">No hay comentarios aún.</p>}
+                  </div>
+                  <div className={`p-4 bg-white dark:bg-slate-900 border-t ${t.cardBorder}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <button 
+                        onClick={() => handleAIAssistant(newComment || comments.map(c => c.content).join('\n'), "Sugerir o generar respuesta profesional para los comentarios", (res) => setNewComment(res))}
+                        className="text-[10px] font-bold text-[#b39656] hover:text-[#6b1c35] flex items-center gap-1 bg-[#b39656]/10 px-2 py-1 rounded transition-colors"
+                      >
+                        <Sun size={10} /> Respuesta IA
+                      </button>
+                    </div>
+                    <form onSubmit={handleAddCommentPipeline} className="relative">
+                      <input 
+                        type="text" 
+                        value={newComment} 
+                        onChange={e => setNewComment(e.target.value)}
+                        placeholder="Write a comment..." 
+                        className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg text-sm focus:outline-none focus:border-[#6b1c35]"
+                      />
+                      <button type="submit" disabled={!newComment.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-[#6b1c35] disabled:opacity-50">
+                        <Send size={16} />
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
         </main>
       </div>
 

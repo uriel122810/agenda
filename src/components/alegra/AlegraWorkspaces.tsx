@@ -5,8 +5,10 @@ import {
   Building2, Plus, Search, Filter, ShieldCheck, AlertTriangle,
   Clock, CheckCircle, ExternalLink, Sparkles, UploadCloud,
   FileText, MessageSquare, Phone, MoreHorizontal, X,
-  FileSpreadsheet, ArrowUpRight
+  FileSpreadsheet, ArrowUpRight, Share2, KeyRound
 } from 'lucide-react';
+import ClientDrawer from './ClientDrawer';
+import ShareDocumentModal from './ShareDocumentModal';
 
 interface ClientRFC {
   id: string;
@@ -55,6 +57,12 @@ export default function AlegraWorkspaces() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Estados de Drawer y Modal Compartir
+  const [selectedClientForDrawer, setSelectedClientForDrawer] = useState<ClientRFC | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [clientForShare, setClientForShare] = useState<ClientRFC | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Formulario del modal 'Añadir cliente'
   const [newRfc, setNewRfc] = useState('');
@@ -217,7 +225,15 @@ export default function AlegraWorkspaces() {
               {filteredClients.map(client => (
                 <tr key={client.id} className="hover:bg-[#FDFBF9] transition">
                   <td className="px-6 py-4">
-                    <div className="font-bold text-slate-900 text-xs sm:text-sm">{client.razonSocial}</div>
+                    <div
+                      onClick={() => {
+                        setSelectedClientForDrawer(client);
+                        setIsDrawerOpen(true);
+                      }}
+                      className="font-bold text-slate-900 text-xs sm:text-sm hover:text-[#581c2f] cursor-pointer"
+                    >
+                      {client.razonSocial}
+                    </div>
                     <div className="text-[11px] text-slate-400">{client.email} • {client.phone}</div>
                   </td>
                   <td className="px-4 py-4 font-mono font-semibold text-slate-700">
@@ -254,24 +270,28 @@ export default function AlegraWorkspaces() {
                     {client.lastUpdate}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
-                        title="Enviar mensaje"
-                        className="rounded-lg p-1 text-slate-400 hover:bg-[#FBF0F3] hover:text-[#581c2f]"
+                        type="button"
+                        onClick={() => {
+                          setSelectedClientForDrawer(client);
+                          setIsDrawerOpen(true);
+                        }}
+                        title="Ver detalles, e.firma y sellos CSD"
+                        className="rounded-lg p-1 text-slate-500 hover:bg-[#FBF0F3] hover:text-[#581c2f] transition"
                       >
-                        <MessageSquare className="h-4 w-4" />
+                        <KeyRound className="h-4 w-4" />
                       </button>
                       <button
-                        title="Contactar vía WhatsApp"
-                        className="rounded-lg p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"
+                        type="button"
+                        onClick={() => {
+                          setClientForShare(client);
+                          setIsShareModalOpen(true);
+                        }}
+                        title="Compartir por WhatsApp o Correo"
+                        className="rounded-lg p-1 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition"
                       >
-                        <Phone className="h-4 w-4" />
-                      </button>
-                      <button
-                        title="Más opciones"
-                        className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
+                        <Share2 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -425,6 +445,25 @@ export default function AlegraWorkspaces() {
           </div>
         </div>
       )}
+
+      {/* Drawer lateral de detalles del cliente / RFC */}
+      <ClientDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        client={selectedClientForDrawer}
+        onOpenShareModal={c => {
+          setClientForShare(c);
+          setIsShareModalOpen(true);
+        }}
+      />
+
+      {/* Modal para compartir documentos por WhatsApp / Correo */}
+      <ShareDocumentModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        defaultClientName={clientForShare?.razonSocial || 'Comercializadora Nacional'}
+        defaultRfc={clientForShare?.rfc || 'XAXX010101000'}
+      />
     </div>
   );
 }

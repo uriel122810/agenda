@@ -24,6 +24,7 @@ export type AlegraTabId =
   | 'bancos'
   | 'contabilidad'
   | 'reportes'
+  | 'historial'
   | 'configuracion';
 
 interface AlegraSidebarProps {
@@ -335,6 +336,19 @@ export default function AlegraSidebar({
         >
           <BarChart2 size={18} className={isTabActive('reportes') ? 'text-[#581c2f]' : 'text-slate-400'} />
           {!isCollapsed && <span>Reportes</span>}
+        </button>
+
+        {/* Historial de Operaciones (Auditoría) */}
+        <button
+          onClick={() => onSelectTab('historial')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-medium transition-all ${
+            isTabActive('historial')
+              ? 'bg-white text-[#581c2f] font-bold shadow-xs border-l-4 border-[#581c2f]'
+              : 'text-slate-600 hover:bg-[#FBF0F3]/60 hover:text-[#581c2f]'
+          }`}
+        >
+          <ShieldCheck size={18} className={isTabActive('historial') ? 'text-[#581c2f]' : 'text-slate-400'} />
+          {!isCollapsed && <span>Historial de operaciones</span>}
         </button>
 
         {/* Configuración */}

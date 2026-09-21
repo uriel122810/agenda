@@ -15,6 +15,8 @@ import AlegraReports from '@/components/alegra/AlegraReports';
 import AlegraCSDModal from '@/components/alegra/AlegraCSDModal';
 import AlegraQuickCreateModal from '@/components/alegra/AlegraQuickCreateModal';
 import AlegraGeneralPlaceholder from '@/components/alegra/AlegraGeneralPlaceholder';
+import AuditHistoryTable from '@/components/alegra/AuditHistoryTable';
+import NotificationDrawer from '@/components/alegra/NotificationDrawer';
 import DocumentFoliator from '@/components/foliador/DocumentFoliator';
 
 interface Props {
@@ -32,9 +34,10 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState('Espacio Central PazSuma');
 
-  // Modales
+  // Modales y Drawers
   const [isCSDModalOpen, setIsCSDModalOpen] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   // Manejador de logout seguro
   const handleLogout = async () => {
@@ -66,6 +69,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
         <AlegraHeader
           onOpenQuickCreate={() => setIsQuickCreateOpen(true)}
           onSelectTab={tab => setCurrentTab(tab)}
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
           userEmail={user?.email || 'uriel@pazsuma.com'}
           userName={userName || 'Espacio PazSuma'}
           onLogout={handleLogout}
@@ -106,7 +110,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           {/* Módulo 6: Gestión de equipo / Mi equipo */}
           {currentTab === 'mi_equipo' && <AlegraTeamManager />}
 
-          {/* Módulo 7: Foliador oficial de documentos PDF */}
+          {/* Módulo 7: Foliador oficial de documentos PDF con Editor Visual y Logo PNG */}
           {currentTab === 'foliador' && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8E2D9] pb-4">
@@ -118,7 +122,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                     </span>
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                    Estampa folios consecutivos correlativos, membrete, códigos QR y leyendas oficiales en tus archivos PDF.
+                    Estampa folios consecutivos correlativos, logotipo personalizado PNG, membrete y códigos oficiales en archivos PDF.
                   </p>
                 </div>
               </div>
@@ -132,6 +136,9 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           {currentTab === 'reportes' && (
             <AlegraReports onOpenCSDModal={() => setIsCSDModalOpen(true)} />
           )}
+
+          {/* Módulo 9: Historial de Operaciones y Auditoría */}
+          {currentTab === 'historial' && <AuditHistoryTable />}
 
           {/* Módulos secundarios: Ingresos, Gastos, Contactos, Inventario, Bancos, Contabilidad, Configuración */}
           {(currentTab === 'ingresos' ||
@@ -149,6 +156,13 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           )}
         </main>
       </div>
+
+      {/* Drawer Flotante de Notificaciones */}
+      <NotificationDrawer
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        onNavigateTab={tab => setCurrentTab(tab)}
+      />
 
       {/* Modal CSD (Certificado de Sello Digital SAT) */}
       <AlegraCSDModal

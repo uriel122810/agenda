@@ -17,6 +17,7 @@ interface AlegraHeaderProps {
   activeWorkspace?: string;
   onWorkspaceChange?: (workspace: string) => void;
   onSearch?: (query: string) => void;
+  onOpenNotifications?: () => void;
 }
 
 export default function AlegraHeader({
@@ -27,7 +28,8 @@ export default function AlegraHeader({
   onLogout,
   activeWorkspace = 'Espacio Central PazSuma',
   onWorkspaceChange,
-  onSearch
+  onSearch,
+  onOpenNotifications
 }: AlegraHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
@@ -171,8 +173,14 @@ export default function AlegraHeader({
         {/* Notificaciones */}
         <button
           type="button"
-          onClick={() => onSelectTab('buzon_sat')}
-          className="relative flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+          onClick={() => {
+            if (onOpenNotifications) {
+              onOpenNotifications();
+            } else {
+              onSelectTab('buzon_sat');
+            }
+          }}
+          className="relative flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-[#581c2f] transition"
           title="Notificaciones institucionales y SAT"
         >
           <Bell className="h-4 w-4" />

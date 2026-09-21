@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import FolioVisualEditor from './FolioVisualEditor';
 
 export interface DocumentFolio {
   id: string;
@@ -74,7 +75,7 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [folios, setFolios] = useState<DocumentFolio[]>([]);
-  const [activeTab, setActiveTab] = useState<'libro' | 'estampador' | 'sql'>('libro');
+  const [activeTab, setActiveTab] = useState<'libro' | 'estampador' | 'editor_visual' | 'sql'>('libro');
   const [loading, setLoading] = useState(true);
   const [usingSupabase, setUsingSupabase] = useState(false);
 
@@ -714,17 +715,27 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
               onClick={() => setActiveTab('estampador')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
                 activeTab === 'estampador'
-                  ? 'bg-[#6b1c35] text-white shadow-sm'
+                  ? 'bg-[#581c2f] text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Stamp size={14} /> Estampador PDF
             </button>
             <button
+              onClick={() => setActiveTab('editor_visual')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'editor_visual'
+                  ? 'bg-[#581c2f] text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Sparkles size={14} /> Editor Visual (Logo PNG)
+            </button>
+            <button
               onClick={() => setActiveTab('sql')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
                 activeTab === 'sql'
-                  ? 'bg-[#6b1c35] text-white shadow-sm'
+                  ? 'bg-[#581c2f] text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
@@ -1257,7 +1268,34 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
         </div>
       )}
 
-      {/* ── TAB 3: BASE DE DATOS Y SINCRONIZACIÓN ─────────────────────────── */}
+      {/* ── TAB 3: EDITOR VISUAL CON LOGO PNG ──────────────────────────────── */}
+      {activeTab === 'editor_visual' && (
+        <div className={`p-6 rounded-2xl border ${cardBg} shadow-sm`}>
+          <FolioVisualEditor
+            initialFolio={folios.length > 0 ? `OFI-2026-${String(folios.length + 1).padStart(4, '0')}` : 'OFI-2026-0001'}
+            onFolioSaved={(newFolio) => {
+              // Actualizar lista local de folios si se genera un documento
+              const folioItem: DocumentFolio = {
+                id: `fol-${Date.now()}`,
+                folio: newFolio.folio,
+                tipo_documento: 'Oficio',
+                asunto: 'Documento sellado digitalmente con logotipo oficial',
+                remitente: userName || 'Dirección PazSuma',
+                destinatario: 'Padrón General',
+                fecha_documento: new Date().toISOString(),
+                estatus: 'registrado',
+                prioridad: 'normal',
+                archivo_nombre: newFolio.archivo_nombre,
+                foliado_digital: true,
+                created_at: new Date().toISOString()
+              };
+              setFolios(prev => [folioItem, ...prev]);
+            }}
+          />
+        </div>
+      )}
+
+      {/* ── TAB 4: BASE DE DATOS Y SINCRONIZACIÓN ─────────────────────────── */}
       {activeTab === 'sql' && (
         <div className={`p-6 rounded-2xl border ${cardBg} shadow-sm space-y-6`}>
           <div className="flex justify-between items-start">

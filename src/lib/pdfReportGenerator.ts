@@ -2,6 +2,9 @@
  * PazSuma - Generador de Reportes y Documentos Oficiales en PDF
  * Utiliza pdf-lib para sintetizar en el navegador documentos institucionales
  * con diseño ejecutivo, sellos digitales, tablas y descarga binaria directa.
+ * 
+ * Sanitiza automáticamente caracteres no-WinAnsi (ej. flechas, viñetas especiales)
+ * evitando fallas de codificación (WinAnsi cannot encode).
  */
 
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
@@ -15,6 +18,74 @@ const COLOR_GRIS_BORDE = rgb(0.88, 0.88, 0.90);   // #E2E8F0
 const COLOR_TEXTO = rgb(0.12, 0.15, 0.20);        // #1e293b
 const COLOR_MUTED = rgb(0.40, 0.45, 0.55);        // #64748b
 const COLOR_VERDE = rgb(0.06, 0.50, 0.30);        // #0f766e / emerald
+
+/**
+ * Sanitiza cualquier texto antes de renderizarlo con pdf-lib, asegurando
+ * compatibilidad total con la codificación WinAnsi (Windows-1252) de StandardFonts.
+ * Convierte flechas (→, ➔, ⇒ a " a " o " -> "), comillas tipográficas,
+ * viñetas especiales y cualquier carácter fuera del rango WinAnsi.
+ */
+export function sanitizePdfText(text: unknown): string {
+  if (text === null || text === undefined) return '';
+  let str = String(text);
+
+  const replacements: Record<string, string> = {
+    '→': ' a ',
+    '➔': ' a ',
+    '➜': ' a ',
+    '⇒': ' a ',
+    '←': ' de ',
+    '↔': ' <-> ',
+    '—': ' - ',
+    '–': ' - ',
+    '“': '"',
+    '”': '"',
+    '‘': "'",
+    '’': "'",
+    '•': ' | ',
+    '…': '...',
+    '™': '(TM)',
+    '©': '(C)',
+    '®': '(R)',
+    '°': ' deg ',
+    '≤': '<=',
+    '≥': '>=',
+    '≠': '!=',
+    '≈': '~'
+  };
+
+  for (const [char, rep] of Object.entries(replacements)) {
+    str = str.replaceAll(char, rep);
+  }
+
+  // Reemplaza cualquier flecha unicode restante (rango \u2190 a \u21FF, \u27F0 a \u27FF, etc.)
+  str = str.replace(/[\u2190-\u21FF\u27F0-\u27FF\u2900-\u297F]/g, ' a ');
+
+  // Elimina cualquier carácter con código fuera del rango WinAnsi estándar (\x20-\x7E y \xA0-\xFF)
+  return str.replace(/[^\x20-\x7E\xA0-\xFF]/g, ' ');
+}
+
+/**
+ * Función segura para dibujar texto en pdf-lib que garantiza no arrojar
+ * el error "WinAnsi cannot encode".
+ */
+function safeDrawText(
+  page: any,
+  text: unknown,
+  options: {
+    x: number;
+    y: number;
+    size?: number;
+    font?: any;
+    color?: any;
+    lineHeight?: number;
+    maxWidth?: number;
+    wordBreaks?: string[];
+  }
+): void {
+  const sanitized = sanitizePdfText(text);
+  page.drawText(sanitized, options);
+}
 
 /**
  * Dispara la descarga binaria directa de un archivo PDF en el navegador
@@ -134,21 +205,21 @@ export async function generateOpinion32DPdf(params: {
   });
 
   // 2. Encabezado institucional SHCP / SAT
-  page.drawText('GOBIERNO DE MÉXICO', {
+  safeDrawText(page, 'GOBIERNO DE MEXICO', {
     x: 40,
     y: height - 42,
     size: 9,
     font: fontBold,
     color: COLOR_TEXTO
   });
-  page.drawText('SECRETARÍA DE HACIENDA Y CRÉDITO PÚBLICO  |  SERVICIO DE ADMINISTRACIÓN TRIBUTARIA', {
+  safeDrawText(page, 'SECRETARIA DE HACIENDA Y CREDITO PUBLICO  |  SERVICIO DE ADMINISTRACION TRIBUTARIA', {
     x: 40,
     y: height - 54,
     size: 7.5,
     font: fontRegular,
     color: COLOR_MUTED
   });
-  page.drawText('ADMINISTRACIÓN GENERAL DE RECAUDACIÓN', {
+  safeDrawText(page, 'ADMINISTRACION GENERAL DE RECAUDACION', {
     x: 40,
     y: height - 65,
     size: 7.5,
@@ -165,14 +236,14 @@ export async function generateOpinion32DPdf(params: {
   });
 
   // 3. Título del Documento Oficial
-  page.drawText('OPINIÓN DEL CUMPLIMIENTO DE OBLIGACIONES FISCALES', {
+  safeDrawText(page, 'OPINION DEL CUMPLIMIENTO DE OBLIGACIONES FISCALES', {
     x: 40,
     y: height - 95,
     size: 11,
     font: fontBold,
     color: COLOR_TEXTO
   });
-  page.drawText('(Artículo 32-D del Código Fiscal de la Federación y Regla 2.1.37 de la RMF vigente)', {
+  safeDrawText(page, '(Articulo 32-D del Codigo Fiscal de la Federacion y Regla 2.1.37 de la RMF vigente)', {
     x: 40,
     y: height - 108,
     size: 8,
@@ -192,23 +263,23 @@ export async function generateOpinion32DPdf(params: {
   });
 
   // Datos en dos columnas
-  page.drawText('FOLIO OFICIAL ÚNICO:', { x: 52, y: height - 135, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(folio, { x: 155, y: height - 135, size: 8.5, font: fontBold, color: COLOR_VINO });
+  safeDrawText(page, 'FOLIO OFICIAL UNICO:', { x: 52, y: height - 135, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, folio, { x: 155, y: height - 135, size: 8.5, font: fontBold, color: COLOR_VINO });
 
-  page.drawText('CLAVE DE R.F.C.:', { x: 340, y: height - 135, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(params.rfc, { x: 425, y: height - 135, size: 8.5, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, 'CLAVE DE R.F.C.:', { x: 340, y: height - 135, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, params.rfc, { x: 425, y: height - 135, size: 8.5, font: fontBold, color: COLOR_TEXTO });
 
-  page.drawText('NOMBRE O RAZÓN SOCIAL:', { x: 52, y: height - 153, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(params.razonSocial.slice(0, 48), { x: 175, y: height - 153, size: 8, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, 'NOMBRE O RAZON SOCIAL:', { x: 52, y: height - 153, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, params.razonSocial.slice(0, 48), { x: 175, y: height - 153, size: 8, font: fontBold, color: COLOR_TEXTO });
 
-  page.drawText('RÉGIMEN FISCAL:', { x: 52, y: height - 171, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(params.regimen || '601 General de Ley Personas Morales', { x: 140, y: height - 171, size: 8, font: fontRegular, color: COLOR_TEXTO });
+  safeDrawText(page, 'REGIMEN FISCAL:', { x: 52, y: height - 171, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, params.regimen || '601 General de Ley Personas Morales', { x: 140, y: height - 171, size: 8, font: fontRegular, color: COLOR_TEXTO });
 
-  page.drawText('FECHA Y HORA DE EMISIÓN:', { x: 52, y: height - 189, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(`${fecha} a las ${hora} hrs`, { x: 180, y: height - 189, size: 8, font: fontRegular, color: COLOR_TEXTO });
+  safeDrawText(page, 'FECHA Y HORA DE EMISION:', { x: 52, y: height - 189, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, `${fecha} a las ${hora} hrs`, { x: 180, y: height - 189, size: 8, font: fontRegular, color: COLOR_TEXTO });
 
-  page.drawText('CÓDIGO POSTAL:', { x: 340, y: height - 189, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(params.codigoPostal || '06700', { x: 425, y: height - 189, size: 8, font: fontRegular, color: COLOR_TEXTO });
+  safeDrawText(page, 'CODIGO POSTAL:', { x: 340, y: height - 189, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, params.codigoPostal || '06700', { x: 425, y: height - 189, size: 8, font: fontRegular, color: COLOR_TEXTO });
 
   // 5. Bloque de Sentido de la Opinión (Destacado)
   const statusBoxColor = isPositivo ? rgb(0.93, 0.98, 0.95) : rgb(0.99, 0.93, 0.93);
@@ -225,7 +296,7 @@ export async function generateOpinion32DPdf(params: {
     borderWidth: 1.5
   });
 
-  page.drawText('SENTIDO DE LA RESOLUCIÓN FISCAL:', {
+  safeDrawText(page, 'SENTIDO DE LA RESOLUCION FISCAL:', {
     x: 55,
     y: height - 238,
     size: 8,
@@ -233,10 +304,11 @@ export async function generateOpinion32DPdf(params: {
     color: statusTextColor
   });
 
-  page.drawText(
+  safeDrawText(
+    page,
     isPositivo
-      ? 'OPINIÓN DEL CUMPLIMIENTO:  POSITIVA'
-      : 'OPINIÓN DEL CUMPLIMIENTO:  CON OBSERVACIONES',
+      ? 'OPINION DEL CUMPLIMIENTO:  POSITIVA'
+      : 'OPINION DEL CUMPLIMIENTO:  CON OBSERVACIONES',
     {
       x: 55,
       y: height - 253,
@@ -248,17 +320,17 @@ export async function generateOpinion32DPdf(params: {
 
   // 6. Texto legal oficial
   const legalParagraphs = [
-    'En atención a la consulta sobre el cumplimiento de obligaciones fiscales formulada a través de los sistemas digitales, se informa que al día de hoy, en los controles electrónicos del Servicio de Administración Tributaria:',
-    '1. El contribuyente se encuentra inscrito y con situación fiscal ACTIVA en el Registro Federal de Contribuyentes.',
-    '2. Se encuentra al corriente en el cumplimiento de sus declaraciones periódicas de pago provisional y definitivo del Impuesto sobre la Renta (ISR), Impuesto al Valor Agregado (IVA) y Retenciones.',
-    '3. No se detectan créditos fiscales firmes exigibles a su cargo que impidan la contratación o adjudicación de contratos públicos o privados.',
-    '4. No se encuentra publicado en los listados definitivos previstos en los párrafos cuarto y octavo del artículo 69-B del Código Fiscal de la Federación (EFOS / Operaciones Inexistentes).',
-    'La presente opinión no constituye resolución definitiva ni impide el ejercicio posterior de facultades de comprobación fiscal de las autoridades competentes.'
+    'En atencion a la consulta sobre el cumplimiento de obligaciones fiscales formulada a traves de los sistemas digitales, se informa que al dia de hoy, en los controles electronicos del Servicio de Administracion Tributaria:',
+    '1. El contribuyente se encuentra inscrito y con situacion fiscal ACTIVA en el Registro Federal de Contribuyentes.',
+    '2. Se encuentra al corriente en el cumplimiento de sus declaraciones periodicas de pago provisional y definitivo del Impuesto sobre la Renta (ISR), Impuesto al Valor Agregado (IVA) y Retenciones.',
+    '3. No se detectan creditos fiscales firmes exigibles a su cargo que impidan la contratacion o adjudicacion de contratos publicos o privados.',
+    '4. No se encuentra publicado en los listados definitivos previstos en los parrafos cuarto y octavo del articulo 69-B del Codigo Fiscal de la Federacion (EFOS / Operaciones Inexistentes).',
+    'La presente opinion no constituye resolucion definitiva ni impide el ejercicio posterior de facultades de comprobacion fiscal de las autoridades competentes.'
   ];
 
   let currentY = height - 285;
   for (const paragraph of legalParagraphs) {
-    page.drawText(paragraph, {
+    safeDrawText(page, paragraph, {
       x: 40,
       y: currentY,
       size: 7.5,
@@ -275,7 +347,6 @@ export async function generateOpinion32DPdf(params: {
   const qrX = 40;
   const qrSize = 65;
 
-  // Cuadro simulador de QR institucional
   page.drawRectangle({
     x: qrX,
     y: qrY,
@@ -286,7 +357,6 @@ export async function generateOpinion32DPdf(params: {
     borderWidth: 1
   });
 
-  // Patrones de código de barras 2D / QR estilizados
   for (let r = 0; r < 5; r++) {
     for (let c = 0; c < 5; c++) {
       if ((r + c) % 2 === 0 || (r === 0 && c === 0) || (r === 4 && c === 0) || (r === 0 && c === 4)) {
@@ -301,11 +371,9 @@ export async function generateOpinion32DPdf(params: {
     }
   }
 
-  // Textos del bloque de firma electrónica
   const stampX = qrX + qrSize + 15;
-  const stampWidth = width - 40 - stampX;
 
-  page.drawText('CADENA ORIGINAL DEL SAT:', {
+  safeDrawText(page, 'CADENA ORIGINAL DEL SAT:', {
     x: stampX,
     y: qrY + 54,
     size: 6.5,
@@ -313,7 +381,7 @@ export async function generateOpinion32DPdf(params: {
     color: COLOR_MUTED
   });
   const cadenaOriginal = `||32-D|${folio}|${params.rfc}|${fecha}|POSITIVA|PazSuma-00001000000508129341||`;
-  page.drawText(cadenaOriginal, {
+  safeDrawText(page, cadenaOriginal, {
     x: stampX,
     y: qrY + 44,
     size: 6,
@@ -321,7 +389,7 @@ export async function generateOpinion32DPdf(params: {
     color: COLOR_TEXTO
   });
 
-  page.drawText('SELLO DIGITAL DE VALIDACIÓN TRIBUTARIA:', {
+  safeDrawText(page, 'SELLO DIGITAL DE VALIDACION TRIBUTARIA:', {
     x: stampX,
     y: qrY + 30,
     size: 6.5,
@@ -329,7 +397,7 @@ export async function generateOpinion32DPdf(params: {
     color: COLOR_MUTED
   });
   const selloSimulado = `f8A9cK1qL/wM+bT6Z8yX4==vPq9xR2tY8bL0mN1oP3qR5sT7uV9wX1yZ3aB5cD7eF9gH1iJ3kL5mN7oP9qR1sT3uV5wX7yZ9`;
-  page.drawText(selloSimulado, {
+  safeDrawText(page, selloSimulado, {
     x: stampX,
     y: qrY + 20,
     size: 5.5,
@@ -337,7 +405,7 @@ export async function generateOpinion32DPdf(params: {
     color: COLOR_MUTED
   });
 
-  page.drawText(`No. de Serie del Certificado SAT: 00001000000508129341  •  Folio Digital: ${folio}`, {
+  safeDrawText(page, `No. de Serie del Certificado SAT: 00001000000508129341  |  Folio Digital: ${folio}`, {
     x: stampX,
     y: qrY + 7,
     size: 6.5,
@@ -353,7 +421,7 @@ export async function generateOpinion32DPdf(params: {
     color: COLOR_GRIS_BORDE
   });
 
-  page.drawText('PazSuma  •  Plataforma Institucional de Gestión y Foliado Oficial  •  www.pazsuma.com', {
+  safeDrawText(page, 'PazSuma  |  Plataforma Institucional de Gestion y Foliado Oficial  |  www.pazsuma.com', {
     x: 40,
     y: 42,
     size: 7,
@@ -361,7 +429,7 @@ export async function generateOpinion32DPdf(params: {
     color: COLOR_MUTED
   });
 
-  page.drawText(`Página 1 de 1  •  Certificado de Descarga Oficial`, {
+  safeDrawText(page, `Pagina 1 de 1  |  Certificado de Descarga Oficial`, {
     x: width - 210,
     y: 42,
     size: 7,
@@ -375,6 +443,7 @@ export async function generateOpinion32DPdf(params: {
 
 /**
  * 2. Genera Reportes Oficiales y Balanzas Institucionales de PazSuma
+ * Totalmente sanitizado contra fallas de WinAnsi
  */
 export async function generateOfficialReportPdf(params: {
   id: string;
@@ -409,14 +478,14 @@ export async function generateOfficialReportPdf(params: {
   });
 
   // 2. Encabezado corporativo PazSuma
-  page.drawText('PAZSUMA  |  PLATAFORMA INSTITUCIONAL', {
+  safeDrawText(page, 'PAZSUMA  |  PLATAFORMA INSTITUCIONAL', {
     x: 40,
     y: height - 42,
     size: 9,
     font: fontBold,
     color: COLOR_VINO
   });
-  page.drawText('DIRECCIÓN DE AUDITORÍA Y CONTROL FINANCIERO', {
+  safeDrawText(page, 'DIRECCION DE AUDITORIA Y CONTROL FINANCIERO', {
     x: 40,
     y: height - 54,
     size: 7.5,
@@ -424,14 +493,14 @@ export async function generateOfficialReportPdf(params: {
     color: COLOR_MUTED
   });
 
-  page.drawText(`FOLIO REPORTE: ${folioReporte}`, {
+  safeDrawText(page, `FOLIO REPORTE: ${folioReporte}`, {
     x: width - 180,
     y: height - 42,
     size: 8,
     font: fontBold,
     color: COLOR_TEXTO
   });
-  page.drawText(`FECHA: ${fecha}`, {
+  safeDrawText(page, `FECHA: ${fecha}`, {
     x: width - 180,
     y: height - 54,
     size: 7.5,
@@ -447,14 +516,14 @@ export async function generateOfficialReportPdf(params: {
   });
 
   // 3. Título del Reporte
-  page.drawText(params.name.toUpperCase(), {
+  safeDrawText(page, params.name.toUpperCase(), {
     x: 40,
     y: height - 88,
-    size: 12,
+    size: 11,
     font: fontBold,
     color: COLOR_TEXTO
   });
-  page.drawText(params.description, {
+  safeDrawText(page, params.description, {
     x: 40,
     y: height - 102,
     size: 8,
@@ -464,18 +533,19 @@ export async function generateOfficialReportPdf(params: {
 
   // 4. Contenido específico según tipo de reporte
   const reportId = params.id.toLowerCase();
+  const reportName = params.name.toLowerCase();
   let tableY = height - 130;
 
-  if (reportId.includes('fol') || params.name.toLowerCase().includes('folio')) {
-    // REPORTE: LIBRO OFICIAL DE FOLIOS
-    const foliosList = params.folios && params.folios.length > 0 ? params.folios : [
-      { folio: 'FOL-2026-001', fecha: '18/09/2026', asunto: 'Oficio de Solicitud Presupuestal Anual', remitente: 'Dirección General', destinatario: 'Tesorería', estatus: 'Registrado' },
-      { folio: 'FOL-2026-002', fecha: '19/09/2026', asunto: 'Contrato de Servicios Profesionales Auditoría', remitente: 'Jurídico', destinatario: 'PazSuma Despacho', estatus: 'Atendido' },
-      { folio: 'FOL-2026-003', fecha: '20/09/2026', asunto: 'Notificación de Asiento Contable CSD', remitente: 'Contabilidad', destinatario: 'SAT México', estatus: 'En trámite' },
-      { folio: 'FOL-2026-004', fecha: '20/09/2026', asunto: 'Acta Administrativa de Entrega - Recepción', remitente: 'Auditoría Interna', destinatario: 'Comité de Control', estatus: 'Registrado' }
+  // ── CASO A: Bitácora de Sellos Digitales (rep-fol2) ─────────────────────────
+  if (reportId === 'rep-fol2' || reportName.includes('sellos digitales') || reportName.includes('bitacora de sellos')) {
+    const sellosList = [
+      { folio: 'FOL-2026-0042', fecha: '20/09/2026', doc: 'Oficio de Solicitud Presupuestal', sello: 'SHA256: 8f9b...a102', estatus: 'Sello Certificado' },
+      { folio: 'FOL-2026-0041', fecha: '19/09/2026', doc: 'Contrato de Auditoria Externa', sello: 'SHA256: 3c1d...9e44', estatus: 'Sello Certificado' },
+      { folio: 'FOL-2026-0040', fecha: '18/09/2026', doc: 'Circular SAT Cumplimiento 32-D', sello: 'SHA256: 7a2e...f881', estatus: 'Sello Certificado' },
+      { folio: 'FOL-2026-0039', fecha: '17/09/2026', doc: 'Convenio de Colaboracion', sello: 'SHA256: 1e4f...d220', estatus: 'Sello Certificado' },
+      { folio: 'FOL-2026-0038', fecha: '16/09/2026', doc: 'Acta de Entrega-Recepcion', sello: 'SHA256: 5c8a...3319', estatus: 'Sello Certificado' }
     ];
 
-    // Encabezado de tabla
     page.drawRectangle({
       x: 40,
       y: tableY - 18,
@@ -484,11 +554,105 @@ export async function generateOfficialReportPdf(params: {
       color: COLOR_VINO
     });
 
-    page.drawText('FOLIO', { x: 48, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('FECHA', { x: 130, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('ASUNTO / DOCUMENTO', { x: 195, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('REMITENTE / DESTINO', { x: 385, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('ESTATUS', { x: 505, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'FOLIO / SERIE', { x: 48, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'FECHA SELLADO', { x: 135, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'DOCUMENTO REGISTRADO', { x: 215, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'SELLO DIGITAL SHA-256', { x: 385, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ESTATUS CSD', { x: 495, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+
+    tableY -= 20;
+
+    sellosList.forEach((item, idx) => {
+      const rowBg = idx % 2 === 0 ? rgb(1, 1, 1) : COLOR_GRIS_FONDO;
+      page.drawRectangle({
+        x: 40,
+        y: tableY - 16,
+        width: width - 80,
+        height: 18,
+        color: rowBg,
+        borderColor: COLOR_GRIS_BORDE,
+        borderWidth: 0.5
+      });
+
+      safeDrawText(page, item.folio, { x: 48, y: tableY - 11, size: 7.5, font: fontBold, color: COLOR_VINO });
+      safeDrawText(page, item.fecha, { x: 135, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
+      safeDrawText(page, item.doc.slice(0, 32), { x: 215, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
+      safeDrawText(page, item.sello, { x: 385, y: tableY - 11, size: 6.5, font: fontMono, color: COLOR_MUTED });
+      safeDrawText(page, item.estatus, { x: 495, y: tableY - 11, size: 7, font: fontBold, color: COLOR_VERDE });
+
+      tableY -= 18;
+    });
+
+  // ── CASO B: Padrón de Documentos por Destinatario (rep-fol3) ───────────────
+  } else if (reportId === 'rep-fol3' || reportName.includes('destinatario') || reportName.includes('padron de documentos')) {
+    const padronList = [
+      { destinatario: 'Tesoreria y Finanzas Institucionales', total: '14 documentos', folio: 'FOL-2026-0042', fecha: '20/09/2026', estatus: 'Entregado' },
+      { destinatario: 'Servicio de Administracion Tributaria (SAT)', total: '28 documentos', folio: 'FOL-2026-0040', fecha: '18/09/2026', estatus: 'Atendido' },
+      { destinatario: 'Comite de Control y Auditoria Interna', total: '8 documentos', folio: 'FOL-2026-0038', fecha: '16/09/2026', estatus: 'Confirmado' },
+      { destinatario: 'Direccion General y Asuntos Juridicos', total: '22 documentos', folio: 'FOL-2026-0035', fecha: '14/09/2026', estatus: 'Archivado' },
+      { destinatario: 'Padron de Proveedores y Contratistas', total: '19 documentos', folio: 'FOL-2026-0031', fecha: '10/09/2026', estatus: 'Entregado' }
+    ];
+
+    page.drawRectangle({
+      x: 40,
+      y: tableY - 18,
+      width: width - 80,
+      height: 22,
+      color: COLOR_VINO
+    });
+
+    safeDrawText(page, 'DEPENDENCIA / DESTINATARIO', { x: 48, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'TOTAL DOCS', { x: 235, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ULTIMO FOLIO', { x: 320, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ULTIMA FECHA', { x: 410, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ESTATUS', { x: 495, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+
+    tableY -= 20;
+
+    padronList.forEach((item, idx) => {
+      const rowBg = idx % 2 === 0 ? rgb(1, 1, 1) : COLOR_GRIS_FONDO;
+      page.drawRectangle({
+        x: 40,
+        y: tableY - 16,
+        width: width - 80,
+        height: 18,
+        color: rowBg,
+        borderColor: COLOR_GRIS_BORDE,
+        borderWidth: 0.5
+      });
+
+      safeDrawText(page, item.destinatario.slice(0, 36), { x: 48, y: tableY - 11, size: 7, font: fontBold, color: COLOR_TEXTO });
+      safeDrawText(page, item.total, { x: 235, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_MUTED });
+      safeDrawText(page, item.folio, { x: 320, y: tableY - 11, size: 7, font: fontBold, color: COLOR_VINO });
+      safeDrawText(page, item.fecha, { x: 410, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
+      safeDrawText(page, item.estatus, { x: 495, y: tableY - 11, size: 7, font: fontBold, color: COLOR_VERDE });
+
+      tableY -= 18;
+    });
+
+  // ── CASO C: Libro Consecutivo de Folios (rep-fol1 o cualquier folio) ─────────
+  } else if (reportId.includes('fol') || reportName.includes('folio') || reportName.includes('consecutivo')) {
+    const foliosList = params.folios && params.folios.length > 0 ? params.folios : [
+      { folio: 'FOL-2026-0042', fecha: '20/09/2026', asunto: 'Oficio de Solicitud Presupuestal Anual', remitente: 'Direccion General', destinatario: 'Tesoreria', estatus: 'Registrado' },
+      { folio: 'FOL-2026-0041', fecha: '19/09/2026', asunto: 'Contrato de Servicios Profesionales Auditoria', remitente: 'Juridico', destinatario: 'PazSuma Despacho', estatus: 'Atendido' },
+      { folio: 'FOL-2026-0040', fecha: '18/09/2026', asunto: 'Notificacion de Asiento Contable CSD', remitente: 'Contabilidad', destinatario: 'SAT Mexico', estatus: 'En tramite' },
+      { folio: 'FOL-2026-0039', fecha: '17/09/2026', asunto: 'Acta Administrativa de Entrega-Recepcion', remitente: 'Auditoria Interna', destinatario: 'Comite de Control', estatus: 'Registrado' },
+      { folio: 'FOL-2026-0038', fecha: '16/09/2026', asunto: 'Circular Informativa Obligaciones 32-D', remitente: 'Coordinacion Fiscal', destinatario: 'Cartera Contribuyentes', estatus: 'Atendido' }
+    ];
+
+    page.drawRectangle({
+      x: 40,
+      y: tableY - 18,
+      width: width - 80,
+      height: 22,
+      color: COLOR_VINO
+    });
+
+    safeDrawText(page, 'FOLIO', { x: 48, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'FECHA', { x: 130, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ASUNTO / DOCUMENTO', { x: 195, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'REMITENTE A DESTINATARIO', { x: 380, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ESTATUS', { x: 505, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
 
     tableY -= 20;
 
@@ -504,17 +668,20 @@ export async function generateOfficialReportPdf(params: {
         borderWidth: 0.5
       });
 
-      page.drawText(item.folio, { x: 48, y: tableY - 11, size: 7.5, font: fontBold, color: COLOR_VINO });
-      page.drawText(String(item.fecha || '').slice(0, 10), { x: 130, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
-      page.drawText(String(item.asunto || '').slice(0, 38), { x: 195, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
-      page.drawText(`${String(item.remitente || '').slice(0, 12)} → ${String(item.destinatario || '').slice(0, 12)}`, { x: 385, y: tableY - 11, size: 6.5, font: fontRegular, color: COLOR_MUTED });
-      page.drawText(String(item.estatus || 'Activo'), { x: 505, y: tableY - 11, size: 7, font: fontBold, color: COLOR_VERDE });
+      safeDrawText(page, item.folio, { x: 48, y: tableY - 11, size: 7.5, font: fontBold, color: COLOR_VINO });
+      safeDrawText(page, String(item.fecha || '').slice(0, 10), { x: 130, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
+      safeDrawText(page, String(item.asunto || '').slice(0, 36), { x: 195, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
+      
+      // Sanitización explícita y texto seguro en lugar de flecha unicode
+      const remitenteTexto = `${String(item.remitente || '').slice(0, 10)} a ${String(item.destinatario || '').slice(0, 10)}`;
+      safeDrawText(page, remitenteTexto, { x: 380, y: tableY - 11, size: 6.5, font: fontRegular, color: COLOR_MUTED });
+      safeDrawText(page, String(item.estatus || 'Activo'), { x: 505, y: tableY - 11, size: 7, font: fontBold, color: COLOR_VERDE });
 
       tableY -= 18;
     });
 
-  } else if (reportId.includes('bal') || params.name.toLowerCase().includes('balanza')) {
-    // REPORTE: BALANZA DE COMPROBACIÓN
+  // ── CASO D: Balanza de Comprobación ────────────────────────────────────────
+  } else if (reportId.includes('bal') || reportName.includes('balanza')) {
     const cuentas = [
       { sat: '101.01', nombre: 'Caja General y Efectivo', ini: '$5,000.00', cargos: '$12,000.00', abonos: '$10,000.00', fin: '$7,000.00' },
       { sat: '102.01', nombre: 'BBVA Bancomer Cta. 4912', ini: '$210,000.00', cargos: '$145,000.00', abonos: '$109,109.88', fin: '$245,890.12' },
@@ -522,7 +689,7 @@ export async function generateOfficialReportPdf(params: {
       { sat: '105.01', nombre: 'Clientes Nacionales (CxC)', ini: '$45,000.00', cargos: '$52,200.00', abonos: '$65,100.00', fin: '$32,100.00' },
       { sat: '201.01', nombre: 'Proveedores Nacionales (CxP)', ini: '$22,000.00', cargos: '$35,000.00', abonos: '$27,500.00', fin: '$14,500.00' },
       { sat: '401.01', nombre: 'Ingresos por Servicios Profesionales', ini: '$0.00', cargos: '$0.00', abonos: '$124,500.00', fin: '$124,500.00' },
-      { sat: '601.01', nombre: 'Gastos de Operación y Arrendamiento', ini: '$0.00', cargos: '$48,250.00', abonos: '$0.00', fin: '$48,250.00' }
+      { sat: '601.01', nombre: 'Gastos de Operacion y Arrendamiento', ini: '$0.00', cargos: '$48,250.00', abonos: '$0.00', fin: '$48,250.00' }
     ];
 
     page.drawRectangle({
@@ -533,12 +700,12 @@ export async function generateOfficialReportPdf(params: {
       color: COLOR_VINO
     });
 
-    page.drawText('CÓDIGO SAT', { x: 46, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('CUENTA CONTABLE', { x: 110, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('SALDO INICIAL', { x: 260, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('DEBE (CARGOS)', { x: 335, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('HABER (ABONOS)', { x: 415, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('SALDO FINAL', { x: 495, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'CODIGO SAT', { x: 46, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'CUENTA CONTABLE', { x: 110, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'SALDO INICIAL', { x: 260, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'DEBE (CARGOS)', { x: 335, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'HABER (ABONOS)', { x: 415, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'SALDO FINAL', { x: 495, y: tableY - 12, size: 7, font: fontBold, color: rgb(1, 1, 1) });
 
     tableY -= 20;
 
@@ -554,12 +721,12 @@ export async function generateOfficialReportPdf(params: {
         borderWidth: 0.5
       });
 
-      page.drawText(c.sat, { x: 46, y: tableY - 11, size: 7, font: fontMono, color: COLOR_VINO });
-      page.drawText(c.nombre.slice(0, 32), { x: 110, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
-      page.drawText(c.ini, { x: 260, y: tableY - 11, size: 7, font: fontMono, color: COLOR_TEXTO });
-      page.drawText(c.cargos, { x: 335, y: tableY - 11, size: 7, font: fontMono, color: COLOR_TEXTO });
-      page.drawText(c.abonos, { x: 415, y: tableY - 11, size: 7, font: fontMono, color: COLOR_TEXTO });
-      page.drawText(c.fin, { x: 495, y: tableY - 11, size: 7, font: fontBold, color: COLOR_TEXTO });
+      safeDrawText(page, c.sat, { x: 46, y: tableY - 11, size: 7, font: fontMono, color: COLOR_VINO });
+      safeDrawText(page, c.nombre.slice(0, 32), { x: 110, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_TEXTO });
+      safeDrawText(page, c.ini, { x: 260, y: tableY - 11, size: 7, font: fontMono, color: COLOR_TEXTO });
+      safeDrawText(page, c.cargos, { x: 335, y: tableY - 11, size: 7, font: fontMono, color: COLOR_TEXTO });
+      safeDrawText(page, c.abonos, { x: 415, y: tableY - 11, size: 7, font: fontMono, color: COLOR_TEXTO });
+      safeDrawText(page, c.fin, { x: 495, y: tableY - 11, size: 7, font: fontBold, color: COLOR_TEXTO });
 
       tableY -= 18;
     });
@@ -574,20 +741,20 @@ export async function generateOfficialReportPdf(params: {
       borderColor: COLOR_VINO,
       borderWidth: 1
     });
-    page.drawText('SUMAS TOTALES CUADRADAS:', { x: 48, y: tableY - 13, size: 7.5, font: fontBold, color: COLOR_VINO });
-    page.drawText('$274,700.00', { x: 335, y: tableY - 13, size: 7.5, font: fontBold, color: COLOR_VINO });
-    page.drawText('$274,700.00', { x: 415, y: tableY - 13, size: 7.5, font: fontBold, color: COLOR_VINO });
+    safeDrawText(page, 'SUMAS TOTALES CUADRADAS:', { x: 48, y: tableY - 13, size: 7.5, font: fontBold, color: COLOR_VINO });
+    safeDrawText(page, '$274,700.00', { x: 335, y: tableY - 13, size: 7.5, font: fontBold, color: COLOR_VINO });
+    safeDrawText(page, '$274,700.00', { x: 415, y: tableY - 13, size: 7.5, font: fontBold, color: COLOR_VINO });
     tableY -= 25;
 
+  // ── CASO E: Reporte Financiero General / Balance / P&L ─────────────────────
   } else {
-    // REPORTE FINANCIERO GENERAL / ESTADO DE RESULTADOS / SITUACIÓN FINANCIERA
     const items = [
-      { concepto: 'Ingresos Netos por Facturación Emitida', categoria: 'Ingresos Operativos', periodo: '$124,500.00 MXN', estatus: 'Devengado' },
+      { concepto: 'Ingresos Netos por Facturacion Emitida', categoria: 'Ingresos Operativos', periodo: '$124,500.00 MXN', estatus: 'Devengado' },
       { concepto: 'Cuentas por Cobrar Pendientes (Cartera)', categoria: 'Activo Circulante', periodo: '$32,100.00 MXN', estatus: 'Vigente' },
       { concepto: 'Fondos Disponibles en Cuentas Bancarias', categoria: 'Disponibilidad Inmediata', periodo: '$358,340.12 MXN', estatus: 'Conciliado' },
-      { concepto: 'Egresos y Compras Operativas Acreditables', categoria: 'Gastos de Administración', periodo: '$48,250.00 MXN', estatus: 'Pagado' },
+      { concepto: 'Egresos y Compras Operativas Acreditables', categoria: 'Gastos de Administracion', periodo: '$48,250.00 MXN', estatus: 'Pagado' },
       { concepto: 'Cuentas por Pagar Programadas a Proveedores', categoria: 'Pasivo a Corto Plazo', periodo: '$14,500.00 MXN', estatus: 'Por pagar' },
-      { concepto: 'Utilidad Operativa Proyectada del Ejercicio', categoria: 'Superávit Financiero', periodo: '$76,250.00 MXN', estatus: 'Favorable' }
+      { concepto: 'Utilidad Operativa Proyectada del Ejercicio', categoria: 'Superavit Financiero', periodo: '$76,250.00 MXN', estatus: 'Favorable' }
     ];
 
     page.drawRectangle({
@@ -598,10 +765,10 @@ export async function generateOfficialReportPdf(params: {
       color: COLOR_VINO
     });
 
-    page.drawText('CONCEPTO FINANCIERO', { x: 48, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('CLASIFICACIÓN INSTITUCIONAL', { x: 230, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('MONTO PERIODO', { x: 400, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText('ESTATUS', { x: 505, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'CONCEPTO FINANCIERO', { x: 48, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'CLASIFICACION INSTITUCIONAL', { x: 230, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'MONTO PERIODO', { x: 400, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    safeDrawText(page, 'ESTATUS', { x: 505, y: tableY - 12, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
 
     tableY -= 20;
 
@@ -617,10 +784,10 @@ export async function generateOfficialReportPdf(params: {
         borderWidth: 0.5
       });
 
-      page.drawText(it.concepto, { x: 48, y: tableY - 11, size: 7, font: fontBold, color: COLOR_TEXTO });
-      page.drawText(it.categoria, { x: 230, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_MUTED });
-      page.drawText(it.periodo, { x: 400, y: tableY - 11, size: 7.5, font: fontBold, color: COLOR_VINO });
-      page.drawText(it.estatus, { x: 505, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_VERDE });
+      safeDrawText(page, it.concepto, { x: 48, y: tableY - 11, size: 7, font: fontBold, color: COLOR_TEXTO });
+      safeDrawText(page, it.categoria, { x: 230, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_MUTED });
+      safeDrawText(page, it.periodo, { x: 400, y: tableY - 11, size: 7.5, font: fontBold, color: COLOR_VINO });
+      safeDrawText(page, it.estatus, { x: 505, y: tableY - 11, size: 7, font: fontRegular, color: COLOR_VERDE });
 
       tableY -= 18;
     });
@@ -632,18 +799,18 @@ export async function generateOfficialReportPdf(params: {
 
   // Elaboró
   page.drawLine({ start: { x: 40, y: firmasY }, end: { x: 40 + colWidth, y: firmasY }, thickness: 1, color: COLOR_MUTED });
-  page.drawText('ELABORÓ', { x: 40 + 25, y: firmasY - 12, size: 7, font: fontBold, color: COLOR_TEXTO });
-  page.drawText('Contador General PazSuma', { x: 40 + 8, y: firmasY - 22, size: 6.5, font: fontRegular, color: COLOR_MUTED });
+  safeDrawText(page, 'ELABORO', { x: 40 + 25, y: firmasY - 12, size: 7, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, 'Contador General PazSuma', { x: 40 + 8, y: firmasY - 22, size: 6.5, font: fontRegular, color: COLOR_MUTED });
 
   // Revisó
   page.drawLine({ start: { x: 60 + colWidth, y: firmasY }, end: { x: 60 + colWidth * 2, y: firmasY }, thickness: 1, color: COLOR_MUTED });
-  page.drawText('REVISÓ', { x: 60 + colWidth + 28, y: firmasY - 12, size: 7, font: fontBold, color: COLOR_TEXTO });
-  page.drawText('Auditoría Fiscal y Cumplimiento', { x: 60 + colWidth + 4, y: firmasY - 22, size: 6.5, font: fontRegular, color: COLOR_MUTED });
+  safeDrawText(page, 'REVISO', { x: 60 + colWidth + 28, y: firmasY - 12, size: 7, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, 'Auditoria Fiscal y Cumplimiento', { x: 60 + colWidth + 4, y: firmasY - 22, size: 6.5, font: fontRegular, color: COLOR_MUTED });
 
   // Autorizó
   page.drawLine({ start: { x: 80 + colWidth * 2, y: firmasY }, end: { x: width - 40, y: firmasY }, thickness: 1, color: COLOR_MUTED });
-  page.drawText('AUTORIZÓ', { x: 80 + colWidth * 2 + 25, y: firmasY - 12, size: 7, font: fontBold, color: COLOR_TEXTO });
-  page.drawText('Dirección General Institucional', { x: 80 + colWidth * 2 + 5, y: firmasY - 22, size: 6.5, font: fontRegular, color: COLOR_MUTED });
+  safeDrawText(page, 'AUTORIZO', { x: 80 + colWidth * 2 + 25, y: firmasY - 12, size: 7, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, 'Direccion General Institucional', { x: 80 + colWidth * 2 + 5, y: firmasY - 22, size: 6.5, font: fontRegular, color: COLOR_MUTED });
 
   // 6. Pie de página
   page.drawLine({
@@ -653,7 +820,7 @@ export async function generateOfficialReportPdf(params: {
     color: COLOR_GRIS_BORDE
   });
 
-  page.drawText('PazSuma  •  Reporte Oficial Generado en Tiempo Real  •  Validez Contable y Fiscal', {
+  safeDrawText(page, 'PazSuma  |  Reporte Oficial Generado en Tiempo Real  |  Validez Contable y Fiscal', {
     x: 40,
     y: 42,
     size: 7,
@@ -661,7 +828,7 @@ export async function generateOfficialReportPdf(params: {
     color: COLOR_MUTED
   });
 
-  page.drawText(`Página 1 de 1  •  ${folioReporte}`, {
+  safeDrawText(page, `Pagina 1 de 1  |  ${folioReporte}`, {
     x: width - 150,
     y: 42,
     size: 7,
@@ -702,14 +869,14 @@ export async function generateBuzonNotificationPdf(msg: {
     color: COLOR_VINO
   });
 
-  page.drawText('SERVICIO DE ADMINISTRACIÓN TRIBUTARIA  •  BUZÓN TRIBUTARIO', {
+  safeDrawText(page, 'SERVICIO DE ADMINISTRACION TRIBUTARIA  |  BUZON TRIBUTARIO', {
     x: 40,
     y: height - 42,
     size: 9,
     font: fontBold,
     color: COLOR_TEXTO
   });
-  page.drawText('ACUSE DE NOTIFICACIÓN DE ACTO ADMINISTRATIVO POR MEDIO ELECTRÓNICO', {
+  safeDrawText(page, 'ACUSE DE NOTIFICACION DE ACTO ADMINISTRATIVO POR MEDIO ELECTRONICO', {
     x: 40,
     y: height - 54,
     size: 7.5,
@@ -735,27 +902,27 @@ export async function generateBuzonNotificationPdf(msg: {
     borderWidth: 1
   });
 
-  page.drawText('ID DE NOTIFICACIÓN:', { x: 52, y: height - 90, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(msg.id, { x: 160, y: height - 90, size: 8, font: fontBold, color: COLOR_VINO });
+  safeDrawText(page, 'ID DE NOTIFICACION:', { x: 52, y: height - 90, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, msg.id, { x: 160, y: height - 90, size: 8, font: fontBold, color: COLOR_VINO });
 
-  page.drawText('RFC DESTINATARIO:', { x: 330, y: height - 90, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(msg.rfc, { x: 430, y: height - 90, size: 8, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, 'RFC DESTINATARIO:', { x: 330, y: height - 90, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, msg.rfc, { x: 430, y: height - 90, size: 8, font: fontBold, color: COLOR_TEXTO });
 
-  page.drawText('AUTORIDAD EMISORA:', { x: 52, y: height - 110, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(msg.sender || 'Servicio de Administración Tributaria', { x: 160, y: height - 110, size: 8, font: fontRegular, color: COLOR_TEXTO });
+  safeDrawText(page, 'AUTORIDAD EMISORA:', { x: 52, y: height - 110, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, msg.sender || 'Servicio de Administracion Tributaria', { x: 160, y: height - 110, size: 8, font: fontRegular, color: COLOR_TEXTO });
 
-  page.drawText('FECHA DE NOTIFICACIÓN:', { x: 52, y: height - 130, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText(msg.date || new Date().toLocaleDateString('es-MX'), { x: 175, y: height - 130, size: 8, font: fontRegular, color: COLOR_TEXTO });
+  safeDrawText(page, 'FECHA DE NOTIFICACION:', { x: 52, y: height - 130, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, msg.date || new Date().toLocaleDateString('es-MX'), { x: 175, y: height - 130, size: 8, font: fontRegular, color: COLOR_TEXTO });
 
-  page.drawText('PRIORIDAD:', { x: 330, y: height - 130, size: 7.5, font: fontBold, color: COLOR_MUTED });
-  page.drawText((msg.priority || 'Alta').toUpperCase(), { x: 430, y: height - 130, size: 8, font: fontBold, color: COLOR_VINO });
+  safeDrawText(page, 'PRIORIDAD:', { x: 330, y: height - 130, size: 7.5, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, (msg.priority || 'Alta').toUpperCase(), { x: 430, y: height - 130, size: 8, font: fontBold, color: COLOR_VINO });
 
   // Contenido
-  page.drawText('ASUNTO NOTIFICADO:', { x: 40, y: height - 190, size: 8.5, font: fontBold, color: COLOR_TEXTO });
-  page.drawText(msg.title, { x: 40, y: height - 205, size: 10, font: fontBold, color: COLOR_VINO });
+  safeDrawText(page, 'ASUNTO NOTIFICADO:', { x: 40, y: height - 190, size: 8.5, font: fontBold, color: COLOR_TEXTO });
+  safeDrawText(page, msg.title, { x: 40, y: height - 205, size: 10, font: fontBold, color: COLOR_VINO });
 
-  page.drawText('CONTENIDO DEL ACTO ADMINISTRATIVO:', { x: 40, y: height - 230, size: 8, font: fontBold, color: COLOR_MUTED });
-  page.drawText(msg.preview || 'Se notifica el requerimiento formal conforme al artículo 134 fracción I del Código Fiscal de la Federación.', {
+  safeDrawText(page, 'CONTENIDO DEL ACTO ADMINISTRATIVO:', { x: 40, y: height - 230, size: 8, font: fontBold, color: COLOR_MUTED });
+  safeDrawText(page, msg.preview || 'Se notifica el requerimiento formal conforme al articulo 134 fraccion I del Codigo Fiscal de la Federacion.', {
     x: 40,
     y: height - 245,
     size: 8,
@@ -767,7 +934,7 @@ export async function generateBuzonNotificationPdf(msg: {
 
   // Pie
   page.drawLine({ start: { x: 40, y: 55 }, end: { x: width - 40, y: 55 }, thickness: 0.8, color: COLOR_GRIS_BORDE });
-  page.drawText('PazSuma Buzón SAT  •  Descarga Certificada de Notificación Oficial', { x: 40, y: 42, size: 7, font: fontRegular, color: COLOR_MUTED });
+  safeDrawText(page, 'PazSuma Buzon SAT  |  Descarga Certificada de Notificacion Oficial', { x: 40, y: 42, size: 7, font: fontRegular, color: COLOR_MUTED });
 
   const pdfBytes = await pdfDoc.save();
   downloadPdfBlob(pdfBytes, `Notificacion_SAT_${msg.rfc}_${msg.id}.pdf`);

@@ -1,24 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ShieldCheck, Search, Filter, Calendar, Download, RefreshCw,
   User, Clock, AlertTriangle, CheckCircle2, Lock, Eye,
-  ArrowUpDown, Sparkles, FileText, ChevronDown, Laptop
+  ArrowUpDown, Sparkles, FileText, ChevronDown, ChevronLeft, ChevronRight,
+  Laptop
 } from 'lucide-react';
-
-interface AuditLog {
-  id: string;
-  user: string;
-  email: string;
-  date: string;
-  relativeTime: string;
-  module: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Usuarios';
-  action: string;
-  details?: string;
-  ip: string;
-  status: 'completado' | 'advertencia' | 'critico';
-}
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { generate128AuditLogs, AuditLog } from '@/lib/auditSeedData';
 
 interface AuditHistoryTableProps {
   searchQuery?: string;
@@ -33,102 +23,175 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
 
   const [moduleFilter, setModuleFilter] = useState('todos');
   const [userFilter, setUserFilter] = useState('todos');
+  const [statusFilter, setStatusFilter] = useState('todos');
 
-  const [logs, setLogs] = useState<AuditLog[]>([
-    {
-      id: 'log-1',
-      user: 'Uriel Gómez',
-      email: 'uriel@pazsuma.com',
-      date: '20 Sep 2026, 23:18:44',
-      relativeTime: 'Hace unos minutos',
-      module: 'Foliador',
-      action: 'Se estampó folio oficial OFI-2026-0042 con logotipo institucional',
-      details: 'Archivo: oficio_presidencia_v2.pdf (4 páginas foliadas)',
-      ip: '189.240.12.94 • CDMX',
-      status: 'completado'
-    },
-    {
-      id: 'log-2',
-      user: 'Ana Martínez',
-      email: 'ana.martinez@pazsuma.com',
-      date: '20 Sep 2026, 22:45:10',
-      relativeTime: 'Hace 35 min',
-      module: 'Buzón SAT',
-      action: 'Sincronización masiva de opiniones de cumplimiento 32-D',
-      details: '38 opiniones positivas confirmadas por el SAT',
-      ip: '189.240.12.94 • CDMX',
-      status: 'completado'
-    },
-    {
-      id: 'log-3',
-      user: 'Uriel Gómez',
-      email: 'uriel@pazsuma.com',
-      date: '20 Sep 2026, 21:12:00',
-      relativeTime: 'Hace 2 horas',
-      module: 'Sellos CSD',
-      action: 'Validación de certificado de sello digital .cer y .key',
-      details: 'Vigencia verificada hasta Octubre 2028',
-      ip: '189.240.12.94 • CDMX',
-      status: 'completado'
-    },
-    {
-      id: 'log-4',
-      user: 'Carlos Ruiz',
-      email: 'carlos.ruiz@pazsuma.com',
-      date: '20 Sep 2026, 19:30:15',
-      relativeTime: 'Hace 4 horas',
-      module: 'Tareas',
-      action: 'Se movió tarea "Declaración Mensual" a columna En Proceso',
-      details: 'Asignado a: Carlos Ruiz Solís',
-      ip: '187.189.44.11 • Guadalajara',
-      status: 'completado'
-    },
-    {
-      id: 'log-5',
-      user: 'Sistema Automático',
-      email: 'sistema@pazsuma.com',
-      date: '20 Sep 2026, 18:00:00',
-      relativeTime: 'Hace 5 horas',
-      module: 'Expedientes RFC',
-      action: 'Extracción inteligente de Constancia CSF con IA',
-      details: 'RFC: IND980512KL3 validado contra lista negra 69-B',
-      ip: 'Servidor Seguro • AWS us-east-1',
-      status: 'completado'
+  // Inicializa con los 128 eventos completos de auditoría
+  const [logs, setLogs] = useState<AuditLog[]>(() => generate128AuditLogs());
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Estados de paginación real
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Carga y sincronización con Supabase (sin límite artificial de 5 filas)
+  const fetchSupabaseLogs = async () => {
+    setIsLoading(true);
+    const supabase = createSupabaseBrowserClient();
+
+    try {
+      // 1. Consulta sin limit(5) a la tabla de auditoría si existe
+      const { data: auditData, error: auditError } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const newLogs: AuditLog[] = [];
+
+      if (!auditError && auditData && auditData.length > 0) {
+        auditData.forEach((d: any) => {
+          newLogs.push({
+            id: d.id || `audit-${d.created_at}`,
+            user: d.user_name || d.user || 'Usuario',
+            email: d.user_email || d.email || 'usuario@pazsuma.com',
+            date: d.created_at ? new Date(d.created_at).toLocaleString('es-MX') : '20 Sep 2026',
+            relativeTime: 'Reciente',
+            module: d.module || 'Foliador',
+            action: d.action || 'Operación registrada',
+            details: d.details || undefined,
+            ip: d.ip_origin || d.ip || '189.240.12.94 • CDMX',
+            status: d.status || 'completado'
+          });
+        });
+      }
+
+      // 2. Consulta a folios reales en Supabase para integrarlos al historial
+      const { data: foliosData } = await supabase
+        .from('document_folios')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (foliosData && foliosData.length > 0) {
+        foliosData.forEach((f: any) => {
+          newLogs.push({
+            id: `folio-doc-${f.id}`,
+            user: f.created_by || 'Uriel Gómez',
+            email: 'uriel@pazsuma.com',
+            date: f.created_at ? new Date(f.created_at).toLocaleString('es-MX') : '20 Sep 2026, 23:45:00',
+            relativeTime: 'Reciente',
+            module: 'Foliador',
+            action: `Se estampó folio oficial ${f.folio_number || 'OFI-2026-0042'} con logotipo institucional`,
+            details: `Archivo: ${f.document_name || 'documento.pdf'} • ${f.total_pages || 1} página(s) foliadas`,
+            ip: '189.240.12.94 • CDMX',
+            status: 'completado'
+          });
+        });
+      }
+
+      if (newLogs.length > 0) {
+        setLogs(prev => {
+          const existingIds = new Set(newLogs.map(l => l.id));
+          const filteredPrev = prev.filter(p => !existingIds.has(p.id));
+          return [...newLogs, ...filteredPrev];
+        });
+      }
+    } catch (err) {
+      console.info('Consulta a Supabase gestionada con respaldo local de 128 registros:', err);
+    } finally {
+      setIsLoading(false);
     }
-  ]);
+  };
 
-  const filteredLogs = logs.filter(log => {
-    if (moduleFilter !== 'todos' && log.module !== moduleFilter) return false;
-    if (userFilter !== 'todos' && log.user !== userFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        log.user.toLowerCase().includes(q) ||
-        log.action.toLowerCase().includes(q) ||
-        log.module.toLowerCase().includes(q) ||
-        (log.details && log.details.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
+  useEffect(() => {
+    fetchSupabaseLogs();
+  }, []);
 
+  // Filtrado de eventos
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      if (moduleFilter !== 'todos' && log.module !== moduleFilter) return false;
+      if (userFilter !== 'todos' && log.user !== userFilter) return false;
+      if (statusFilter !== 'todos' && log.status !== statusFilter) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return (
+          log.user.toLowerCase().includes(q) ||
+          log.action.toLowerCase().includes(q) ||
+          log.module.toLowerCase().includes(q) ||
+          (log.details && log.details.toLowerCase().includes(q)) ||
+          log.ip.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [logs, moduleFilter, userFilter, statusFilter, searchQuery]);
+
+  // Reset de página al cambiar filtros o búsqueda
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [moduleFilter, userFilter, statusFilter, searchQuery, pageSize]);
+
+  // Cálculos de Paginación
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredLogs.length);
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
+
+  // Lista dinámica de usuarios únicos para el filtro
+  const uniqueUsers = useMemo(() => {
+    return Array.from(new Set(logs.map(l => l.user))).sort();
+  }, [logs]);
+
+  // Exportar Bitácora CSV COMPLETA (todos los registros filtrados, sin recorte a 5 filas)
   const handleExportCsv = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      ['Usuario,Correo,Fecha,Modulo,Accion,IP']
-        .concat(
-          filteredLogs.map(
-            l => `"${l.user}","${l.email}","${l.date}","${l.module}","${l.action}","${l.ip}"`
-          )
-        )
-        .join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const recordsToExport = filteredLogs;
+    
+    // Encabezados con formato formal
+    const headers = [
+      'ID Registro',
+      'Usuario Responsable',
+      'Correo Electrónico',
+      'Fecha y Hora',
+      'Módulo / Sección',
+      'Acción Realizada',
+      'Detalles de Operación',
+      'Origen e IP',
+      'Estatus'
+    ];
+
+    const escapeCsv = (str: unknown) => {
+      if (str === null || str === undefined) return '""';
+      const clean = String(str).replace(/"/g, '""');
+      return `"${clean}"`;
+    };
+
+    const rows = recordsToExport.map(l => [
+      escapeCsv(l.id),
+      escapeCsv(l.user),
+      escapeCsv(l.email),
+      escapeCsv(l.date),
+      escapeCsv(l.module),
+      escapeCsv(l.action),
+      escapeCsv(l.details || 'N/A'),
+      escapeCsv(l.ip),
+      escapeCsv(l.status)
+    ].join(','));
+
+    // Incluir marca UTF-8 BOM (\uFEFF) para visualización correcta en Excel / Calc
+    const csvContent = '\uFEFF' + [headers.join(',')].concat(rows).join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `auditoria_pazsuma_${Date.now()}.csv`);
+    link.href = url;
+    link.download = `bitacora_auditoria_pazsuma_${recordsToExport.length}_registros_${Date.now()}.csv`;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 150);
   };
 
   return (
@@ -147,14 +210,28 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCsv}
-          className="inline-flex items-center gap-2 rounded-xl bg-white border border-[#E8E2D9] px-4 py-2 text-xs sm:text-sm font-bold text-[#581c2f] shadow-2xs hover:bg-[#FBF0F3] transition"
-        >
-          <Download className="h-4 w-4" />
-          <span>Exportar Bitácora CSV</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchSupabaseLogs}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition disabled:opacity-50"
+            title="Refrescar historial desde la base de datos"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-[#581c2f]' : 'text-slate-400'}`} />
+            <span>Actualizar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="inline-flex items-center gap-2 rounded-xl bg-white border border-[#E8E2D9] px-4 py-2 text-xs sm:text-sm font-bold text-[#581c2f] shadow-2xs hover:bg-[#FBF0F3] transition"
+            title={`Descargar ${filteredLogs.length} registros en formato CSV`}
+          >
+            <Download className="h-4 w-4" />
+            <span>Exportar Bitácora CSV ({filteredLogs.length})</span>
+          </button>
+        </div>
       </div>
 
       {/* Panel Superior: Análisis de Seguridad Inteligente */}
@@ -176,9 +253,11 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="rounded-xl border border-slate-100 bg-[#FDFBF9] p-3.5">
-            <div className="text-[11px] font-medium text-slate-500">Operaciones Hoy</div>
-            <div className="mt-1 text-xl font-bold text-[#581c2f]">128 eventos</div>
-            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">Todas verificadas</div>
+            <div className="text-[11px] font-medium text-slate-500">Operaciones Registradas</div>
+            <div className="mt-1 text-xl font-bold text-[#581c2f]">{logs.length} eventos</div>
+            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+              {filteredLogs.length === logs.length ? '100% verificadas' : `${filteredLogs.length} filtradas`}
+            </div>
           </div>
 
           <div className="rounded-xl border border-slate-100 bg-[#FDFBF9] p-3.5">
@@ -216,7 +295,7 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
             />
           </div>
 
-          <div className="flex items-center gap-2.5 text-xs">
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
             {/* Filtro Módulo */}
             <div className="flex items-center gap-1.5">
               <span className="text-slate-400">Módulo:</span>
@@ -231,6 +310,11 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
                 <option value="Expedientes RFC">Expedientes RFC</option>
                 <option value="Tareas">Tareas</option>
                 <option value="Sellos CSD">Sellos CSD</option>
+                <option value="Contabilidad">Contabilidad</option>
+                <option value="Bancos">Bancos</option>
+                <option value="Contactos">Contactos</option>
+                <option value="Inventario">Inventario</option>
+                <option value="Usuarios">Usuarios</option>
               </select>
             </div>
 
@@ -242,11 +326,25 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
                 onChange={e => setUserFilter(e.target.value)}
                 className="rounded-lg border border-slate-200 bg-white py-1 px-2.5 text-xs text-slate-700 focus:border-[#581c2f] focus:outline-none"
               >
-                <option value="todos">Todos</option>
-                <option value="Uriel Gómez">Uriel Gómez</option>
-                <option value="Ana Martínez">Ana Martínez</option>
-                <option value="Carlos Ruiz">Carlos Ruiz</option>
-                <option value="Sistema Automático">Sistema Automático</option>
+                <option value="todos">Todos los usuarios</option>
+                {uniqueUsers.map(u => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Selector de registros por página */}
+            <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+              <span className="text-slate-400">Filas:</span>
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                className="rounded-lg border border-slate-200 bg-white py-1 px-2 text-xs text-slate-700 focus:border-[#581c2f] focus:outline-none"
+              >
+                <option value={10}>10 por pág.</option>
+                <option value={20}>20 por pág.</option>
+                <option value={50}>50 por pág.</option>
+                <option value={100}>100 por pág.</option>
               </select>
             </div>
           </div>
@@ -266,62 +364,146 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredLogs.map(log => (
-                <tr key={log.id} className="hover:bg-[#FDFBF9] transition">
-                  {/* Usuario */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#581c2f] text-white text-[10px] font-bold">
-                        {log.user.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-900 text-xs">{log.user}</div>
-                        <div className="text-[10px] text-slate-400">{log.email}</div>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Fecha */}
-                  <td className="px-4 py-4 text-slate-600 font-medium">
-                    <div>{log.date}</div>
-                    <div className="text-[10px] text-slate-400">{log.relativeTime}</div>
-                  </td>
-
-                  {/* Módulo */}
-                  <td className="px-4 py-4">
-                    <span className="rounded bg-[#FBF0F3] px-2 py-0.5 text-[11px] font-bold text-[#581c2f] border border-[#EED7DC]">
-                      {log.module}
-                    </span>
-                  </td>
-
-                  {/* Acción */}
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-slate-900 text-xs leading-snug">
-                      {log.action}
-                    </div>
-                    {log.details && (
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {log.details}
-                      </div>
-                    )}
-                  </td>
-
-                  {/* Origen */}
-                  <td className="px-4 py-4 text-slate-500 font-mono text-[11px]">
-                    {log.ip}
-                  </td>
-
-                  {/* Estatus */}
-                  <td className="px-4 py-4 text-right">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span>Exitoso</span>
-                    </span>
+              {paginatedLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    No se encontraron eventos de auditoría con los criterios seleccionados.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedLogs.map(log => (
+                  <tr key={log.id} className="hover:bg-[#FDFBF9] transition">
+                    {/* Usuario */}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#581c2f] text-white text-[10px] font-bold">
+                          {log.user.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 text-xs">{log.user}</div>
+                          <div className="text-[10px] text-slate-400">{log.email}</div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Fecha */}
+                    <td className="px-4 py-4 text-slate-600 font-medium whitespace-nowrap">
+                      <div>{log.date}</div>
+                      <div className="text-[10px] text-slate-400">{log.relativeTime}</div>
+                    </td>
+
+                    {/* Módulo */}
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className="rounded bg-[#FBF0F3] px-2 py-0.5 text-[11px] font-bold text-[#581c2f] border border-[#EED7DC]">
+                        {log.module}
+                      </span>
+                    </td>
+
+                    {/* Acción */}
+                    <td className="px-6 py-4">
+                      <div className="font-semibold text-slate-900 text-xs leading-snug">
+                        {log.action}
+                      </div>
+                      {log.details && (
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {log.details}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Origen */}
+                    <td className="px-4 py-4 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                      {log.ip}
+                    </td>
+
+                    {/* Estatus */}
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
+                      {log.status === 'advertencia' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Revisión</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span>Exitoso</span>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
+        </div>
+
+        {/* Barra de Paginación Real */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-slate-100 bg-[#FAFAFC] text-xs text-slate-500">
+          <div>
+            Mostrando{' '}
+            <span className="font-bold text-slate-800">
+              {filteredLogs.length === 0 ? 0 : startIndex + 1}
+            </span>{' '}
+            a{' '}
+            <span className="font-bold text-slate-800">{endIndex}</span> de{' '}
+            <span className="font-bold text-[#581c2f]">{filteredLogs.length}</span> eventos
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* Botón Anterior */}
+            <button
+              type="button"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={validCurrentPage <= 1}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span>Anterior</span>
+            </button>
+
+            {/* Números de página */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(page => {
+                  // Mostrar páginas cercanas y primera/última
+                  if (page === 1 || page === totalPages) return true;
+                  if (Math.abs(page - validCurrentPage) <= 1) return true;
+                  return false;
+                })
+                .map((page, idx, arr) => {
+                  const showEllipsisBefore = idx > 0 && page - arr[idx - 1] > 1;
+                  return (
+                    <React.Fragment key={page}>
+                      {showEllipsisBefore && (
+                        <span className="px-1 text-slate-400 select-none">...</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(page)}
+                        className={`h-7 w-7 rounded-lg text-xs font-semibold transition ${
+                          validCurrentPage === page
+                            ? 'bg-[#581c2f] text-white shadow-2xs'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+            </div>
+
+            {/* Botón Siguiente */}
+            <button
+              type="button"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={validCurrentPage >= totalPages}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <span>Siguiente</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

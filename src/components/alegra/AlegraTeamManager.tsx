@@ -22,7 +22,7 @@ export default function AlegraTeamManager() {
     {
       id: 'usr-1',
       name: 'Uriel Gómez (Tú)',
-      email: 'uriel@alegra.com',
+      email: 'uriel@pazsuma.com',
       role: 'Administrador',
       status: 'Aceptada',
       invitationsCount: 1,
@@ -32,7 +32,7 @@ export default function AlegraTeamManager() {
     {
       id: 'usr-2',
       name: 'Ana Martínez',
-      email: 'ana.martinez@despacho.com',
+      email: 'ana.martinez@pazsuma.com',
       role: 'Contador Senior',
       status: 'Aceptada',
       invitationsCount: 1,
@@ -42,7 +42,7 @@ export default function AlegraTeamManager() {
     {
       id: 'usr-3',
       name: 'Carlos Ruiz Solís',
-      email: 'carlos.ruiz@despacho.com',
+      email: 'carlos.ruiz@pazsuma.com',
       role: 'Auxiliar Contable',
       status: 'Aceptada',
       invitationsCount: 2,
@@ -75,7 +75,7 @@ export default function AlegraTeamManager() {
       name: inviteName.trim() || inviteEmail.split('@')[0],
       email: inviteEmail.trim(),
       role: inviteRole,
-      status: 'Aceptada', // Según requisito: Pill/Badge verde para 'Aceptada'
+      status: 'Aceptada',
       invitationsCount: 1,
       assignedClientsCount: 0,
       joinedDate: 'Hoy'
@@ -110,17 +110,17 @@ export default function AlegraTeamManager() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Gestión de Equipo y Colaboradores
+            Gestión de Equipo y Colaboradores PazSuma
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Administra los accesos de contadores, auxiliares y auditores en tu despacho
+            Administra los accesos de contadores, auxiliares y auditores en la plataforma institucional
           </p>
         </div>
 
         <button
           type="button"
           onClick={() => setIsInviteModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#00C9A7] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-[#00B596] active:scale-[0.98]"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#581c2f] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs transition hover:bg-[#72223c] active:scale-[0.98]"
         >
           <UserPlus className="h-4 w-4" />
           <span>+ Agregar colaborador</span>
@@ -129,8 +129,8 @@ export default function AlegraTeamManager() {
 
       {/* Tarjetas resumen */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6FAF6] text-[#00A88B]">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FBF0F3] text-[#581c2f]">
             <Users className="h-5 w-5" />
           </div>
           <div>
@@ -139,7 +139,7 @@ export default function AlegraTeamManager() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
             <CheckCircle2 className="h-5 w-5" />
           </div>
@@ -151,7 +151,7 @@ export default function AlegraTeamManager() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
             <Clock className="h-5 w-5" />
           </div>
@@ -164,8 +164,8 @@ export default function AlegraTeamManager() {
         </div>
       </div>
 
-      {/* Tabla con columnas: Usuario, Correo, Estado (Pill/Badge verde para "Aceptada"), Invitaciones */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+      {/* Tabla */}
+      <div className="rounded-2xl border border-[#E8E2D9] bg-white shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
@@ -180,16 +180,16 @@ export default function AlegraTeamManager() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {members.map(member => (
-                <tr key={member.id} className="hover:bg-slate-50/80 transition">
+                <tr key={member.id} className="hover:bg-[#FDFBF9] transition">
                   {/* Usuario */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-bold text-[#7C3AED]">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#581c2f] text-xs font-bold text-white">
                         {member.name.charAt(0)}
                       </div>
                       <div>
-                        <div className="font-semibold text-slate-900 text-xs sm:text-sm">{member.name}</div>
-                        <div className="text-[11px] text-slate-400">Se unió: {member.joinedDate}</div>
+                        <div className="font-bold text-slate-900 text-xs sm:text-sm">{member.name}</div>
+                        <div className="text-[11px] text-slate-400">Ingreso: {member.joinedDate}</div>
                       </div>
                     </div>
                   </td>
@@ -207,7 +207,7 @@ export default function AlegraTeamManager() {
                     </span>
                   </td>
 
-                  {/* Estado (Pill verde para 'Aceptada') */}
+                  {/* Estado */}
                   <td className="px-4 py-4">
                     {member.status === 'Aceptada' ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200">
@@ -234,7 +234,7 @@ export default function AlegraTeamManager() {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleResendInvite(member.id)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-[#FBF0F3] hover:text-[#581c2f] transition"
                         title="Reenviar invitación"
                       >
                         <Send className="h-3.5 w-3.5" />
@@ -268,9 +268,9 @@ export default function AlegraTeamManager() {
               <X className="h-5 w-5" />
             </button>
 
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Agregar colaborador</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Agregar colaborador a PazSuma</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Envía una invitación para colaborar en la gestión contable de tu despacho.
+              Envía una invitación para colaborar en la gestión institucional y foliado.
             </p>
 
             <form onSubmit={handleSendInvite} className="space-y-4">
@@ -283,21 +283,21 @@ export default function AlegraTeamManager() {
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
                   placeholder="Ej: Lic. Mariana Vega"
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+                  className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Correo electrónico *
+                  Correo institucional *
                 </label>
                 <input
                   type="email"
                   required
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
-                  placeholder="colaborador@despacho.com"
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+                  placeholder="colaborador@pazsuma.com"
+                  className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                 />
               </div>
 
@@ -308,11 +308,11 @@ export default function AlegraTeamManager() {
                 <select
                   value={inviteRole}
                   onChange={e => setInviteRole(e.target.value as any)}
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#00C9A7] focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-[#581c2f] focus:outline-none"
                 >
-                  <option value="Contador Senior">Contador Senior (Acceso completo a clientes y pólizas)</option>
+                  <option value="Contador Senior">Contador Senior (Acceso completo a expedientes y pólizas)</option>
                   <option value="Auxiliar Contable">Auxiliar Contable (Captura de gastos, ingresos y tareas)</option>
-                  <option value="Auditor">Auditor (Solo lectura y descarga de reportes fiscales)</option>
+                  <option value="Auditor">Auditor (Solo lectura y descarga de reportes oficiales)</option>
                 </select>
               </div>
 
@@ -326,7 +326,7 @@ export default function AlegraTeamManager() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-[#00C9A7] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#00B596]"
+                  className="rounded-xl bg-[#581c2f] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#72223c]"
                 >
                   Enviar invitación
                 </button>

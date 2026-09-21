@@ -56,7 +56,7 @@ export default function AlegraWorkspaces() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Formulario del modal 'Añadir cliente' (Screenshot 5)
+  // Formulario del modal 'Añadir cliente'
   const [newRfc, setNewRfc] = useState('');
   const [newRazonSocial, setNewRazonSocial] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -76,7 +76,6 @@ export default function AlegraWorkspaces() {
 
   const countPositive = clients.filter(c => c.status32D === 'positivo').length;
   const countNegative = clients.filter(c => c.status32D === 'negativo').length;
-  const countPending = clients.filter(c => c.status32D === 'pendiente').length;
 
   const handleSimulateAiUpload = () => {
     setIsAiProcessing(true);
@@ -86,7 +85,7 @@ export default function AlegraWorkspaces() {
       setNewEmail('contacto@logistica-mx.com');
       setNewPhone('5544332211');
       setIsAiProcessing(false);
-    }, 900);
+    }, 800);
   };
 
   const handleSaveClient = (e: React.FormEvent) => {
@@ -115,14 +114,14 @@ export default function AlegraWorkspaces() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Cabecera de Espacio de Trabajo / Clientes RFC */}
+      {/* Cabecera de Espacio de Trabajo / Cartera de RFCs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Espacio de trabajo / Cartera de RFCs
+            Espacio de Trabajo / Cartera de RFCs
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
-            Consulta el cumplimiento fiscal de tus clientes ante el SAT desde un solo lugar.
+            Control institucional y consulta de cumplimiento fiscal 32-D ante el SAT
           </p>
         </div>
 
@@ -130,7 +129,7 @@ export default function AlegraWorkspaces() {
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#00C9A7] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-[#00B596] active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#581c2f] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs transition hover:bg-[#72223c] active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
             <span>Añadir RFC</span>
@@ -138,9 +137,9 @@ export default function AlegraWorkspaces() {
         </div>
       </div>
 
-      {/* Indicadores de Cumplimiento SAT (32-D) exacto al screenshot 5 */}
+      {/* Indicadores de Cumplimiento SAT (32-D) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
             <CheckCircle className="h-5 w-5" />
           </div>
@@ -150,17 +149,17 @@ export default function AlegraWorkspaces() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div>
             <div className="text-xl font-bold text-slate-900">{countNegative}</div>
-            <div className="text-xs font-medium text-rose-600">Negativos (Con créditos)</div>
+            <div className="text-xs font-medium text-rose-600">Con observaciones</div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
             <Clock className="h-5 w-5" />
           </div>
@@ -170,19 +169,19 @@ export default function AlegraWorkspaces() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6FAF6] text-[#00A88B]">
+        <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-xs flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FBF0F3] text-[#581c2f]">
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
             <div className="text-xl font-bold text-slate-900">{clients.length}</div>
-            <div className="text-xs font-medium text-[#00A88B]">Total Clientes Activos</div>
+            <div className="text-xs font-semibold text-[#581c2f]">Expedientes Activos</div>
           </div>
         </div>
       </div>
 
       {/* Tabla de Clientes */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-[#E8E2D9] bg-white shadow-xs overflow-hidden">
         {/* Barra de búsqueda y filtros */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-b border-slate-100 bg-[#FAFAFC]">
           <div className="relative w-full sm:w-80">
@@ -192,12 +191,12 @@ export default function AlegraWorkspaces() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Buscar por RFC, razón social o correo..."
-              className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+              className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
             />
           </div>
 
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Mostrando <strong>{filteredClients.length}</strong> RFCs</span>
+            <span>Total: <strong>{filteredClients.length}</strong> expedientes</span>
           </div>
         </div>
 
@@ -206,37 +205,37 @@ export default function AlegraWorkspaces() {
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
               <tr>
-                <th className="px-6 py-3.5">Cliente / Razón Social</th>
+                <th className="px-6 py-3.5">Razón Social</th>
                 <th className="px-4 py-3.5">RFC</th>
                 <th className="px-4 py-3.5">Opinión de Cumplimiento (32-D)</th>
-                <th className="px-4 py-3.5">Acceso Facturación</th>
+                <th className="px-4 py-3.5">Facturación</th>
                 <th className="px-4 py-3.5">Actualizado</th>
                 <th className="px-6 py-3.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredClients.map(client => (
-                <tr key={client.id} className="hover:bg-slate-50/80 transition">
+                <tr key={client.id} className="hover:bg-[#FDFBF9] transition">
                   <td className="px-6 py-4">
-                    <div className="font-semibold text-slate-900 text-xs sm:text-sm">{client.razonSocial}</div>
+                    <div className="font-bold text-slate-900 text-xs sm:text-sm">{client.razonSocial}</div>
                     <div className="text-[11px] text-slate-400">{client.email} • {client.phone}</div>
                   </td>
-                  <td className="px-4 py-4 font-mono font-medium text-slate-700">
+                  <td className="px-4 py-4 font-mono font-semibold text-slate-700">
                     {client.rfc}
                   </td>
                   <td className="px-4 py-4">
                     {client.status32D === 'positivo' ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                         <CheckCircle className="h-3 w-3" />
                         <span>Positiva</span>
                       </span>
                     ) : client.status32D === 'negativo' ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 border border-rose-200">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 border border-rose-200">
                         <AlertTriangle className="h-3 w-3" />
                         <span>Negativa</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 border border-amber-200">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 border border-amber-200">
                         <Clock className="h-3 w-3" />
                         <span>En espera</span>
                       </span>
@@ -244,7 +243,7 @@ export default function AlegraWorkspaces() {
                   </td>
                   <td className="px-4 py-4">
                     {client.billingAccess ? (
-                      <span className="rounded bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-[#00A88B]">
+                      <span className="rounded bg-[#FBF0F3] px-2 py-0.5 text-[10px] font-bold text-[#581c2f]">
                         Habilitado
                       </span>
                     ) : (
@@ -257,8 +256,8 @@ export default function AlegraWorkspaces() {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        title="Enviar mensaje por correo"
-                        className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Enviar mensaje"
+                        className="rounded-lg p-1 text-slate-400 hover:bg-[#FBF0F3] hover:text-[#581c2f]"
                       >
                         <MessageSquare className="h-4 w-4" />
                       </button>
@@ -283,11 +282,10 @@ export default function AlegraWorkspaces() {
         </div>
       </div>
 
-      {/* Modal 'Añadir cliente' con IA idéntico al screenshot 5 */}
+      {/* Modal 'Añadir cliente' con IA en estilo PazSuma */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            {/* Botón cerrar */}
             <button
               onClick={() => setIsModalOpen(false)}
               className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition"
@@ -295,38 +293,37 @@ export default function AlegraWorkspaces() {
               <X className="h-5 w-5" />
             </button>
 
-            {/* Encabezado del modal */}
             <div>
               <h3 className="text-lg font-bold text-slate-900">
-                Añadir cliente
+                Añadir Expediente / RFC
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                Añade el RFC de tu cliente y créele una cuenta de Alegra para gestionar su contabilidad.
+                Registra el RFC para seguimiento de obligaciones y buzón SAT en PazSuma.
               </p>
             </div>
 
-            {/* Dropzone con IA (Screenshot 5) */}
-            <div className="mt-5 rounded-xl border border-dashed border-teal-300 bg-[#F0FDF9] p-4 text-center">
-              <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[#00A88B] mb-1">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Añadir RFC con IA &lt;</span>
+            {/* Dropzone con IA en tono vino #581c2f */}
+            <div className="mt-5 rounded-xl border border-dashed border-[#eed7dc] bg-[#FBF0F3] p-4 text-center">
+              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-[#581c2f] mb-1">
+                <Sparkles className="h-3.5 w-3.5 text-[#b39656]" />
+                <span>Extracción Inteligente de CSF &lt;</span>
               </div>
-              <p className="text-[11px] text-slate-500 max-w-xs mx-auto mb-3">
-                Arrastra un archivo PNG, JPG o PDF con la Constancia de Situación Fiscal (máx. 5 MB).
+              <p className="text-[11px] text-slate-600 max-w-xs mx-auto mb-3">
+                Arrastra un archivo PDF o imagen con la Constancia de Situación Fiscal (CSF).
               </p>
 
               <button
                 type="button"
                 onClick={handleSimulateAiUpload}
                 disabled={isAiProcessing}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-teal-200 px-3 py-1.5 text-xs font-semibold text-[#00A88B] shadow-xs hover:bg-[#E6FAF6] transition disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-[#eed7dc] px-3.5 py-1.5 text-xs font-bold text-[#581c2f] shadow-2xs hover:bg-[#581c2f] hover:text-white transition disabled:opacity-50 cursor-pointer"
               >
                 <UploadCloud className="h-3.5 w-3.5" />
-                <span>{isAiProcessing ? 'Extrayendo datos con IA...' : 'Cargar comprobante'}</span>
+                <span>{isAiProcessing ? 'Analizando documento...' : 'Cargar CSF'}</span>
               </button>
             </div>
 
-            {/* Formulario de cliente */}
+            {/* Formulario */}
             <form onSubmit={handleSaveClient} className="mt-5 space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -338,22 +335,22 @@ export default function AlegraWorkspaces() {
                     required
                     value={newRfc}
                     onChange={e => setNewRfc(e.target.value.toUpperCase())}
-                    placeholder="RFC de tu cliente"
-                    className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs font-mono text-slate-800 placeholder-slate-400 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+                    placeholder="RFC emisor"
+                    className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs font-mono text-slate-800 placeholder-slate-400 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Nombre o razón social *
+                    Razón Social *
                   </label>
                   <input
                     type="text"
                     required
                     value={newRazonSocial}
                     onChange={e => setNewRazonSocial(e.target.value)}
-                    placeholder="Nombre de tu cliente"
-                    className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+                    placeholder="Nombre o empresa"
+                    className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                   />
                 </div>
               </div>
@@ -361,20 +358,20 @@ export default function AlegraWorkspaces() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Correo del cliente
+                    Correo electrónico
                   </label>
                   <input
                     type="email"
                     value={newEmail}
                     onChange={e => setNewEmail(e.target.value)}
-                    placeholder="Correo de tu cliente"
-                    className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+                    placeholder="contacto@empresa.com"
+                    className="w-full rounded-lg border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    WhatsApp del cliente
+                    WhatsApp de contacto
                   </label>
                   <div className="flex">
                     <span className="inline-flex items-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-500 font-medium">
@@ -385,27 +382,27 @@ export default function AlegraWorkspaces() {
                       value={newPhone}
                       onChange={e => setNewPhone(e.target.value)}
                       placeholder="5512345678"
-                      className="w-full rounded-r-lg border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#00C9A7] focus:outline-none focus:ring-1 focus:ring-[#00C9A7]"
+                      className="w-full rounded-r-lg border border-slate-200 bg-white py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Toggle switch 'Dale acceso de facturación a tu cliente' */}
+              {/* Toggle switch */}
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 border border-slate-100">
                 <div className="flex flex-col">
                   <span className="text-xs font-semibold text-slate-800">
-                    Dale acceso de facturación a tu cliente
+                    Acceso al portal de consulta
                   </span>
-                  <span className="text-[10px] text-[#00A88B] font-medium">
-                    Solo facturación
+                  <span className="text-[10px] text-[#581c2f] font-semibold">
+                    Solo lectura y descarga
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setGiveBillingAccess(!giveBillingAccess)}
                   className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    giveBillingAccess ? 'bg-[#00C9A7]' : 'bg-slate-300'
+                    giveBillingAccess ? 'bg-[#581c2f]' : 'bg-slate-300'
                   }`}
                 >
                   <span
@@ -416,13 +413,12 @@ export default function AlegraWorkspaces() {
                 </button>
               </div>
 
-              {/* Botón de envío */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-[#00C9A7] py-2.5 px-4 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-[#00B596] active:scale-[0.98]"
+                  className="w-full rounded-xl bg-[#581c2f] py-2.5 px-4 text-xs sm:text-sm font-semibold text-white shadow-xs transition hover:bg-[#72223c] active:scale-[0.98]"
                 >
-                  Añadir cliente
+                  Guardar Expediente
                 </button>
               </div>
             </form>

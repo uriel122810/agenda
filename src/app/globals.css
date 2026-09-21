@@ -5,27 +5,25 @@
 :root {
   --font-inter: 'Inter', system-ui, sans-serif;
 
-  /* Paleta Alegra / Fiscally UI */
-  --color-alegra-teal:       #00C9A7;
-  --color-alegra-teal-hover: #00B796;
-  --color-alegra-teal-light: #E6FAF6;
-  --color-alegra-bg:         #F8FAFC;
-  --color-alegra-card:       #FFFFFF;
-  --color-alegra-border:     #E2E8F0;
-  --color-alegra-text-main:  #0F172A;
-  --color-alegra-text-muted: #64748B;
-  --color-alegra-purple:     #8B5CF6;
+  /* Identidad Visual Oficial PazSuma */
+  --color-pazsuma-primary:       #581c2f;
+  --color-pazsuma-primary-hover: #72223c;
+  --color-pazsuma-primary-light: #fbf0f3;
+  --color-pazsuma-primary-border:#eed7dc;
+  
+  --color-pazsuma-dorado:        #b39656;
+  --color-pazsuma-dorado-light:  #f5efdf;
+  --color-pazsuma-crema:         #f4f1ea;
 
-  /* Paleta Institucional (retrocompatibilidad) */
-  --color-guinda:       #6b1c35;
-  --color-guinda-dark:  #581c2f;
-  --color-dorado:       #b39656;
-  --color-dorado-light: #dfd3c3;
-  --color-crema:        #f4f1ea;
+  --color-pazsuma-bg:            #fbfbfa;
+  --color-pazsuma-card:          #ffffff;
+  --color-pazsuma-border:        #e5e7eb;
+  --color-pazsuma-text-main:     #1e293b;
+  --color-pazsuma-text-muted:    #64748b;
 
-  --color-success:  #00C9A7;
-  --color-warning:  #f59e0b;
-  --color-danger:   #ef4444;
+  --color-success:               #10b981;
+  --color-warning:               #f59e0b;
+  --color-danger:                #ef4444;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -34,7 +32,7 @@
 
   /* Scroll */
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 201, 167, 0.3) transparent;
+  scrollbar-color: rgba(88, 28, 47, 0.3) transparent;
 }
 
 /* ── Reset y Base ─────────────────────────────────────────────────────────── */
@@ -50,6 +48,8 @@ html {
 
 body {
   min-height: 100vh;
+  background-color: var(--color-pazsuma-bg);
+  color: var(--color-pazsuma-text-main);
 }
 
 /* ── Scrollbar Personalizado ──────────────────────────────────────────────── */
@@ -61,50 +61,46 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(107,28,53,0.25);
-  border-radius: 3px;
+  background: rgba(88, 28, 47, 0.25);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(107,28,53,0.5);
+  background: rgba(88, 28, 47, 0.45);
 }
 
-/* ── Selección de Texto ───────────────────────────────────────────────────── */
-::selection {
-  background: rgba(179,150,86,0.35);
-  color: #fff;
-}
-
-/* ── Animaciones ──────────────────────────────────────────────────────────── */
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px); }
+/* ── Utilidades de Animación y Estilo ───────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes slide-in-left {
-  from { opacity: 0; transform: translateX(-12px); }
-  to   { opacity: 1; transform: translateX(0); }
+.animate-fade-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+/* ── Tarjetas y Paneles PazSuma ─────────────────────────────────────────────── */
+.pazsuma-card {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.15s ease-in-out;
 }
 
-.animate-fade-in    { animation: fade-in 0.4s ease-out both; }
-.animate-slide-in   { animation: slide-in-left 0.3s ease-out both; }
-.animate-scale-in   { animation: scale-in 0.3s ease-out both; }
-
-/* Delays escalonados para listas */
-.delay-100 { animation-delay: 0.1s; }
-.delay-200 { animation-delay: 0.2s; }
-.delay-300 { animation-delay: 0.3s; }
-
-/* ── Botones Base ─────────────────────────────────────────────────────────── */
-button {
-  cursor: pointer;
-  transition: all 0.2s;
+.pazsuma-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(88, 28, 47, 0.06), 0 2px 4px -2px rgba(88, 28, 47, 0.04);
 }
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+
+/* Badge de Estatus Institucional */
+.badge-pazsuma {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background-color: #fbf0f3;
+  color: #581c2f;
+  border: 1px solid #eed7dc;
 }

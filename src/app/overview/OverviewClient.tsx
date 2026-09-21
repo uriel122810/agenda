@@ -30,7 +30,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   // Estado de navegación
   const [currentTab, setCurrentTab] = useState<AlegraTabId>('inicio');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [activeWorkspace, setActiveWorkspace] = useState('Espacio Contador');
+  const [activeWorkspace, setActiveWorkspace] = useState('Espacio Central PazSuma');
 
   // Modales
   const [isCSDModalOpen, setIsCSDModalOpen] = useState(false);
@@ -43,42 +43,40 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
     } catch (err) {
       console.warn('Error during sign out:', err);
     } finally {
-      // Limpiar cookies de sesión de desarrollo si existen
       document.cookie = 'dev_auth_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
       router.push('/login');
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 antialiased selection:bg-[#00C9A7]/20 selection:text-[#008F76]">
-      {/* 1. Barra lateral izquierda (Sidebar fixed) estilo Alegra */}
+    <div className="min-h-screen bg-[#FDFBF9] flex font-sans text-slate-900 antialiased selection:bg-[#581c2f]/20 selection:text-[#581c2f]">
+      {/* 1. Barra lateral fija con identidad y colores PazSuma (sin publicidad) */}
       <AlegraSidebar
         currentTab={currentTab}
         onSelectTab={tab => setCurrentTab(tab)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        onOpenPromo={() => alert('¡Aprovecha la promoción anual de Alegra! 9 meses contratados, 12 meses de servicio.')}
-        userEmail={user?.email || 'contador@despacho.com'}
-        userName={userName || 'Espacio Contador'}
+        userEmail={user?.email || 'uriel@pazsuma.com'}
+        userName={userName || 'Espacio PazSuma'}
       />
 
       {/* 2. Contenedor principal con Header sticky y vistas dinámicas */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Barra superior (Header) */}
+        {/* Barra superior institucional */}
         <AlegraHeader
           onOpenQuickCreate={() => setIsQuickCreateOpen(true)}
           onSelectTab={tab => setCurrentTab(tab)}
-          userEmail={user?.email || 'contador@despacho.com'}
-          userName={userName || 'Espacio Contador'}
+          userEmail={user?.email || 'uriel@pazsuma.com'}
+          userName={userName || 'Espacio PazSuma'}
           onLogout={handleLogout}
           activeWorkspace={activeWorkspace}
           onWorkspaceChange={ws => setActiveWorkspace(ws)}
-          onSearch={q => console.log('Búsqueda global:', q)}
+          onSearch={q => console.log('Búsqueda PazSuma:', q)}
         />
 
         {/* Área de contenido scrollable */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto animate-in fade-in duration-150">
-          {/* Módulo 1: Inicio / Resumen del negocio (Screenshot 1) */}
+          {/* Módulo 1: Inicio / Resumen operativo y financiero */}
           {currentTab === 'inicio' && (
             <AlegraDashboard
               onSelectTab={tab => setCurrentTab(tab)}
@@ -87,7 +85,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             />
           )}
 
-          {/* Módulo 2: Configuración inicial (Screenshot 3) */}
+          {/* Módulo 2: Configuración inicial */}
           {currentTab === 'configuracion_inicial' && (
             <AlegraOnboarding
               onSelectTab={tab => setCurrentTab(tab)}
@@ -96,10 +94,10 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             />
           )}
 
-          {/* Módulo 3: Buzón SAT (Screenshot 4) */}
+          {/* Módulo 3: Buzón SAT */}
           {currentTab === 'buzon_sat' && <AlegraBuzonSAT />}
 
-          {/* Módulo 4: Espacio de trabajo / Cartera de RFCs (Screenshot 5) */}
+          {/* Módulo 4: Espacio de trabajo / Cartera de RFCs */}
           {currentTab === 'espacio_trabajo' && <AlegraWorkspaces />}
 
           {/* Módulo 5: Gestión de tareas (Kanban + Lista) */}
@@ -108,23 +106,23 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           {/* Módulo 6: Gestión de equipo / Mi equipo */}
           {currentTab === 'mi_equipo' && <AlegraTeamManager />}
 
-          {/* Módulo 7: Foliador de documentos PDF (funcionalidad clave previa estilizada) */}
+          {/* Módulo 7: Foliador oficial de documentos PDF */}
           {currentTab === 'foliador' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8E2D9] pb-4">
                 <div>
                   <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                    <span>Foliador Oficial de Documentos Contables y Libros</span>
-                    <span className="rounded bg-teal-50 px-2 py-0.5 text-xs font-semibold text-[#00A88B] border border-teal-200">
-                      Oficial
+                    <span>Foliador Oficial de Documentos y Libros</span>
+                    <span className="rounded-full bg-[#FBF0F3] px-2.5 py-0.5 text-xs font-bold text-[#581c2f] border border-[#EED7DC]">
+                      PazSuma Oficial
                     </span>
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                    Estampa folios consecutivos, membrete, códigos QR y leyendas fiscales en tus archivos PDF.
+                    Estampa folios consecutivos correlativos, membrete, códigos QR y leyendas oficiales en tus archivos PDF.
                   </p>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="rounded-2xl border border-[#E8E2D9] bg-white p-6 shadow-xs">
                 <DocumentFoliator />
               </div>
             </div>
@@ -135,7 +133,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
             <AlegraReports onOpenCSDModal={() => setIsCSDModalOpen(true)} />
           )}
 
-          {/* Módulos secundarios del menú lateral: Ingresos, Gastos, Contactos, Inventario, Bancos, Contabilidad, Configuración */}
+          {/* Módulos secundarios: Ingresos, Gastos, Contactos, Inventario, Bancos, Contabilidad, Configuración */}
           {(currentTab === 'ingresos' ||
             currentTab === 'gastos' ||
             currentTab === 'contactos' ||
@@ -156,7 +154,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
       <AlegraCSDModal
         isOpen={isCSDModalOpen}
         onClose={() => setIsCSDModalOpen(false)}
-        onSuccess={() => alert('Certificado SAT configurado y listo para timbrado.')}
+        onSuccess={() => alert('Certificado SAT configurado y validado exitosamente en PazSuma.')}
       />
 
       {/* Modal Creación Rápida (+) */}

@@ -95,9 +95,9 @@ export default function AlegraBuzonSAT() {
   const handleSimulateNewSatNotice = () => {
     const newNotice: BuzonMessage = {
       id: `sat-${Date.now()}`,
-      rfc: 'ABCD800101XX1',
-      razonSocial: 'Servicios de Consultoría Integral SC',
-      title: 'Comunicado de Validación de Facturación CFDI 4.0',
+      rfc: 'PAZ980101XX1',
+      razonSocial: 'PazSuma Gestión y Consultoría SC',
+      title: 'Notificación de Validación de Declaración y Sellos CSD',
       type: 'notificacion',
       date: 'Hace un momento',
       isRead: false,
@@ -111,15 +111,15 @@ export default function AlegraBuzonSAT() {
       {/* Título */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <span>Buzón SAT</span>
-          <span className="rounded bg-teal-50 px-2 py-0.5 text-xs font-semibold text-[#00A88B] border border-teal-200">
+          <span>Buzón SAT Oficial</span>
+          <span className="rounded-full bg-[#FBF0F3] px-2.5 py-0.5 text-xs font-bold text-[#581c2f] border border-[#EED7DC]">
             Beta
           </span>
         </h1>
 
         <button
           onClick={handleSimulateNewSatNotice}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:border-[#00C9A7] hover:text-[#00C9A7] transition"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[#E8E2D9] bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:border-[#581c2f] hover:text-[#581c2f] transition"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           <span>Sincronizar avisos SAT</span>
@@ -127,41 +127,41 @@ export default function AlegraBuzonSAT() {
       </div>
 
       {/* Tarjeta principal con pestañas y barra de herramientas */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-[#E8E2D9] bg-white shadow-xs overflow-hidden">
         {/* Pestañas: Principal | Archivo */}
-        <div className="flex border-b border-slate-200 px-6 pt-2">
+        <div className="flex border-b border-[#E8E2D9] px-6 pt-2 bg-[#FDFBF9]">
           <button
             onClick={() => { setActiveTab('principal'); setSelectedMessages([]); }}
-            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition ${
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition ${
               activeTab === 'principal'
-                ? 'border-[#00C9A7] text-[#00A88B]'
+                ? 'border-[#581c2f] text-[#581c2f]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Inbox className="h-4 w-4" />
             <span>Principal</span>
-            <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+            <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] text-slate-600 shadow-2xs">
               {messages.filter(m => m.status === 'principal').length}
             </span>
           </button>
 
           <button
             onClick={() => { setActiveTab('archivo'); setSelectedMessages([]); }}
-            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 transition ${
+            className={`flex items-center gap-2 py-3 px-4 text-xs sm:text-sm font-bold border-b-2 transition ${
               activeTab === 'archivo'
-                ? 'border-[#00C9A7] text-[#00A88B]'
+                ? 'border-[#581c2f] text-[#581c2f]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Archive className="h-4 w-4" />
             <span>Archivo</span>
-            <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+            <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] text-slate-600 shadow-2xs">
               {messages.filter(m => m.status === 'archivo').length}
             </span>
           </button>
         </div>
 
-        {/* Barra de herramientas exactamente como el screenshot 4 */}
+        {/* Barra de herramientas */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-[#FAFAFC] px-6 py-2.5 text-xs text-slate-600">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -169,7 +169,7 @@ export default function AlegraBuzonSAT() {
                 type="checkbox"
                 checked={currentMessages.length > 0 && selectedMessages.length === currentMessages.length}
                 onChange={toggleSelectAll}
-                className="h-4 w-4 rounded border-slate-300 text-[#00C9A7] focus:ring-[#00C9A7]"
+                className="h-4 w-4 rounded border-slate-300 text-[#581c2f] focus:ring-[#581c2f]"
               />
             </label>
 
@@ -195,13 +195,13 @@ export default function AlegraBuzonSAT() {
               <span>Ordenar</span>
             </button>
 
-            {/* Acciones en lote si hay seleccionados */}
+            {/* Acciones en lote */}
             {selectedMessages.length > 0 && (
               <>
                 <button
                   onClick={handleArchiveSelected}
                   title={activeTab === 'principal' ? 'Mover a Archivo' : 'Mover a Principal'}
-                  className="flex items-center gap-1 text-[#00A88B] hover:text-[#008F76] font-medium"
+                  className="flex items-center gap-1 text-[#581c2f] hover:text-[#72223c] font-bold"
                 >
                   <Archive className="h-3.5 w-3.5" />
                   <span>{activeTab === 'principal' ? 'Archivar' : 'Desarchivar'}</span>
@@ -209,7 +209,7 @@ export default function AlegraBuzonSAT() {
                 <button
                   onClick={handleDeleteSelected}
                   title="Eliminar seleccionados"
-                  className="flex items-center gap-1 text-rose-600 hover:text-rose-700 font-medium"
+                  className="flex items-center gap-1 text-rose-600 hover:text-rose-700 font-bold"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>Eliminar</span>
@@ -220,7 +220,7 @@ export default function AlegraBuzonSAT() {
             {/* Clientes */}
             <button className="flex items-center gap-1.5 hover:text-slate-900 transition">
               <Users className="h-3.5 w-3.5 text-slate-400" />
-              <span>Clientes</span>
+              <span>Contribuyentes</span>
             </button>
           </div>
 
@@ -230,7 +230,7 @@ export default function AlegraBuzonSAT() {
                 setFilterType('todos');
                 setSearchQuery('');
               }}
-              className="text-slate-400 hover:text-slate-700 transition"
+              className="text-slate-400 hover:text-[#581c2f] transition font-medium"
             >
               Remover filtros
             </button>
@@ -240,16 +240,15 @@ export default function AlegraBuzonSAT() {
         {/* Contenido / Lista de Mensajes o Empty State */}
         <div className="min-h-[360px] p-6 flex flex-col justify-center">
           {currentMessages.length === 0 ? (
-            /* Empty state exactamente igual a la captura 4 */
             <div className="flex flex-col items-center justify-center text-center py-12 px-4 max-w-md mx-auto">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 mb-4 border border-slate-100">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FBF0F3] text-[#581c2f] mb-4 border border-[#EED7DC]">
                 <Mail className="h-8 w-8 stroke-[1.5]" />
               </div>
               <h3 className="text-base font-bold text-slate-900">
                 Todo listo para recibir mensajes del SAT
               </h3>
               <p className="mt-2 text-xs sm:text-sm text-slate-500 leading-relaxed">
-                A partir de ahora recibirás los comunicados, notificaciones y documentos que tus clientes con buzón activo reciban del SAT.
+                A partir de ahora recibirás los comunicados, notificaciones y documentos que tus clientes con buzón activo reciban del SAT en PazSuma.
               </p>
             </div>
           ) : (
@@ -260,7 +259,7 @@ export default function AlegraBuzonSAT() {
                   <div
                     key={msg.id}
                     className={`flex items-center justify-between p-3.5 rounded-xl transition cursor-pointer ${
-                      isSelected ? 'bg-teal-50/50' : 'hover:bg-slate-50'
+                      isSelected ? 'bg-[#FBF0F3]/60' : 'hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -268,14 +267,14 @@ export default function AlegraBuzonSAT() {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelect(msg.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-[#00C9A7] focus:ring-[#00C9A7]"
+                        className="h-4 w-4 rounded border-slate-300 text-[#581c2f] focus:ring-[#581c2f]"
                       />
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-xs text-slate-900">{msg.razonSocial}</span>
+                          <span className="font-bold text-xs text-slate-900">{msg.razonSocial}</span>
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">{msg.rfc}</span>
                           {!msg.isRead && (
-                            <span className="h-2 w-2 rounded-full bg-[#00C9A7]" title="No leído" />
+                            <span className="h-2 w-2 rounded-full bg-[#581c2f]" title="No leído" />
                           )}
                         </div>
                         <p className="text-xs text-slate-600 mt-0.5">{msg.title}</p>
@@ -287,10 +286,10 @@ export default function AlegraBuzonSAT() {
                       <button
                         onClick={e => {
                           e.stopPropagation();
-                          alert(`Descargando notificación del SAT para ${msg.rfc}...`);
+                          alert(`Descargando notificación oficial SAT para ${msg.rfc}...`);
                         }}
                         className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition"
-                        title="Descargar notificación oficial PDF/XML"
+                        title="Descargar PDF/XML"
                       >
                         <Download className="h-4 w-4" />
                       </button>

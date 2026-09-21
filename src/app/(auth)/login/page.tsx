@@ -44,7 +44,24 @@ function LoginFormContent() {
       if (error) throw error;
     } catch (error: any) {
       console.error('Error al iniciar sesión:', error);
-      setErrorMessage(error?.message || 'Error al conectar con Google OAuth.');
+      setLoading(false);
+    }
+  }
+
+  async function handleDirectAdminLogin() {
+    setLoading(true);
+    setErrorMessage('');
+    try {
+      const res = await fetch('/api/auth/dev-login', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.redirect) {
+        window.location.href = data.redirect;
+      } else {
+        throw new Error(data.error || 'Error al iniciar sesión directa');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || 'Error al acceder directamente');
       setLoading(false);
     }
   }
@@ -163,6 +180,17 @@ function LoginFormContent() {
         <span className="font-bold text-[#6b1c35] text-xs sm:text-sm tracking-wide">
           Acceso con Google Institucional
         </span>
+      </button>
+
+      {/* Botón Acceso Directo de Administrador / Pruebas */}
+      <button
+        type="button"
+        onClick={handleDirectAdminLogin}
+        disabled={loading}
+        className="w-full mt-3 bg-gradient-to-r from-[#6b1c35] to-[#581c2f] hover:from-[#581c2f] hover:to-[#401321] text-white py-3.5 px-6 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-[#6b1c35]/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+      >
+        <KeyRound size={16} className="text-[#b39656]" />
+        <span>Ingresar como Administrador (Acceso Directo)</span>
       </button>
 
       {/* Separator */}

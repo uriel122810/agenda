@@ -75,7 +75,7 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [folios, setFolios] = useState<DocumentFolio[]>([]);
-  const [activeTab, setActiveTab] = useState<'libro' | 'estampador' | 'editor_visual' | 'sql'>('libro');
+  const [activeTab, setActiveTab] = useState<'libro' | 'estampador' | 'sql'>('libro');
   const [loading, setLoading] = useState(true);
   const [usingSupabase, setUsingSupabase] = useState(false);
 
@@ -102,19 +102,6 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
   const [notas, setNotas] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // PDF Stamper Tool States
-  const [stamperFile, setStamperFile] = useState<File | null>(null);
-  const [stamperFolio, setStamperFolio] = useState('');
-  const [stamperPosition, setStamperPosition] = useState<'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'top-center' | 'bottom-center'>('top-right');
-  const [stamperFormat, setStamperFormat] = useState<'boxed' | 'line' | 'simple'>('boxed');
-  const [stamperColor, setStamperColor] = useState<'guinda' | 'dorado' | 'negro' | 'azul'>('guinda');
-  const [stamperFontSize, setStamperFontSize] = useState<number>(9);
-  const [stamperPageRange, setStamperPageRange] = useState<'all' | 'first' | 'custom'>('all');
-  const [customPageRange, setCustomPageRange] = useState('');
-  const [isStamping, setIsStamping] = useState(false);
-  const [stampedSuccess, setStampedSuccess] = useState<string | null>(null);
-  const [stampedPageCount, setStampedPageCount] = useState(0);
 
   const [copiedSql, setCopiedSql] = useState(false);
 
@@ -302,10 +289,9 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
     setFolios(updated);
     persistFoliosLocally(updated);
 
-    // If a PDF file was attached, offer to jump directly to stamper
+    // If a PDF file was attached, activate estampador tab
     if (attachedFile && attachedFile.type === 'application/pdf') {
-      setStamperFile(attachedFile);
-      setStamperFolio(newFolioItem.folio);
+      setActiveTab('estampador');
     }
 
     setIsSubmitting(false);
@@ -404,238 +390,8 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
   };
 
   // ── Open In Stamper ───────────────────────────────────────────────────────
-  const handleOpenInStamper = (folio: DocumentFolio) => {
-    setStamperFolio(folio.folio);
+  const handleOpenInStamper = (_folio: DocumentFolio) => {
     setActiveTab('estampador');
-    setStampedSuccess(null);
-  };
-
-  // ── PDF STAMPING LOGIC (pdf-lib) ──────────────────────────────────────────
-  const handleStampPDF = async () => {
-    if (!stamperFile) {
-      alert('Por favor selecciona un archivo PDF para foliar.');
-      return;
-    }
-    if (!stamperFolio.trim()) {
-      alert('Por favor especifica el número de folio a estampar.');
-      return;
-    }
-
-    setIsStamping(true);
-    setStampedSuccess(null);
-
-    try {
-      const fileBytes = await stamperFile.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(fileBytes);
-      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      const helveticaRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-      const totalPages = pdfDoc.getPageCount();
-
-      // Determine pages to stamp
-      let pageIndicesToStamp: number[] = [];
-      if (stamperPageRange === 'all') {
-        pageIndicesToStamp = Array.from({ length: totalPages }, (_, i) => i);
-      } else if (stamperPageRange === 'first') {
-        pageIndicesToStamp = [0];
-      } else if (stamperPageRange === 'custom') {
-        const parts = customPageRange.split(',');
-        parts.forEach(part => {
-          if (part.includes('-')) {
-            const [start, end] = part.split('-').map(p => parseInt(p.trim(), 10));
-            if (!isNaN(start) && !isNaN(end)) {
-              for (let i = Math.max(1, start); i <= Math.min(totalPages, end); i++) {
-                pageIndicesToStamp.push(i - 1);
-              }
-            }
-          } else {
-            const pageNum = parseInt(part.trim(), 10);
-            if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-              pageIndicesToStamp.push(pageNum - 1);
-            }
-          }
-        });
-      }
-
-      if (pageIndicesToStamp.length === 0) {
-        pageIndicesToStamp = Array.from({ length: totalPages }, (_, i) => i);
-      }
-
-      // Color mapping
-      let textColor = rgb(0.42, 0.11, 0.21); // Guinda institucional #6b1c35
-      let borderColor = rgb(0.42, 0.11, 0.21);
-      let bgColor = rgb(0.98, 0.96, 0.94);
-
-      if (stamperColor === 'dorado') {
-        textColor = rgb(0.70, 0.59, 0.34); // Dorado #b39656
-        borderColor = rgb(0.70, 0.59, 0.34);
-        bgColor = rgb(0.98, 0.97, 0.94);
-      } else if (stamperColor === 'negro') {
-        textColor = rgb(0.07, 0.09, 0.15); // Negro pizarra
-        borderColor = rgb(0.2, 0.2, 0.2);
-        bgColor = rgb(0.96, 0.96, 0.96);
-      } else if (stamperColor === 'azul') {
-        textColor = rgb(0.11, 0.31, 0.85); // Azul registro
-        borderColor = rgb(0.11, 0.31, 0.85);
-        bgColor = rgb(0.94, 0.96, 1.0);
-      }
-
-      const currentDateFormatted = new Date().toLocaleDateString('es-MX', {
-        day: '2-digit', month: '2-digit', year: 'numeric'
-      });
-
-      // Stamp each target page
-      for (const idx of pageIndicesToStamp) {
-        const page = pdfDoc.getPage(idx);
-        const { width, height } = page.getSize();
-        const pageNum = idx + 1;
-
-        if (stamperFormat === 'boxed') {
-          // Complete Institutional Seal Box
-          const boxWidth = 175;
-          const boxHeight = 44;
-          let x = width - boxWidth - 25;
-          let y = height - boxHeight - 20;
-
-          if (stamperPosition === 'top-left') {
-            x = 25;
-            y = height - boxHeight - 20;
-          } else if (stamperPosition === 'top-center') {
-            x = (width - boxWidth) / 2;
-            y = height - boxHeight - 20;
-          } else if (stamperPosition === 'bottom-right') {
-            x = width - boxWidth - 25;
-            y = 20;
-          } else if (stamperPosition === 'bottom-left') {
-            x = 25;
-            y = 20;
-          } else if (stamperPosition === 'bottom-center') {
-            x = (width - boxWidth) / 2;
-            y = 20;
-          }
-
-          // Draw Box
-          page.drawRectangle({
-            x,
-            y,
-            width: boxWidth,
-            height: boxHeight,
-            borderColor,
-            borderWidth: 1.2,
-            color: bgColor,
-            opacity: 0.95
-          });
-
-          // Top label
-          page.drawText('PAZSUMA — SISTEMA INSTITUCIONAL', {
-            x: x + 8,
-            y: y + boxHeight - 12,
-            size: 6.5,
-            font: helveticaBold,
-            color: textColor
-          });
-
-          // Folio number
-          page.drawText(`FOLIO: ${stamperFolio}`, {
-            x: x + 8,
-            y: y + boxHeight - 24,
-            size: stamperFontSize,
-            font: helveticaBold,
-            color: textColor
-          });
-
-          // Date and Page count
-          page.drawText(`FECHA: ${currentDateFormatted}  |  PÁG. ${pageNum}/${totalPages}`, {
-            x: x + 8,
-            y: y + 7,
-            size: 6.5,
-            font: helveticaRegular,
-            color: rgb(0.3, 0.3, 0.3)
-          });
-
-        } else if (stamperFormat === 'line') {
-          // Line format
-          const lineText = `FOLIO: ${stamperFolio}  •  FECHA: ${currentDateFormatted}  •  PÁG. ${pageNum} DE ${totalPages}`;
-          const textWidth = helveticaBold.widthOfTextAtSize(lineText, stamperFontSize);
-          let x = width - textWidth - 30;
-          let y = height - 28;
-
-          if (stamperPosition === 'top-left') x = 30;
-          if (stamperPosition === 'top-center') x = (width - textWidth) / 2;
-          if (stamperPosition === 'bottom-right') { x = width - textWidth - 30; y = 25; }
-          if (stamperPosition === 'bottom-left') { x = 30; y = 25; }
-          if (stamperPosition === 'bottom-center') { x = (width - textWidth) / 2; y = 25; }
-
-          page.drawText(lineText, {
-            x,
-            y,
-            size: stamperFontSize,
-            font: helveticaBold,
-            color: textColor
-          });
-
-        } else {
-          // Simple folio only
-          const text = `${stamperFolio} (Pág. ${pageNum}/${totalPages})`;
-          const textWidth = helveticaBold.widthOfTextAtSize(text, stamperFontSize);
-          let x = width - textWidth - 30;
-          let y = height - 28;
-
-          if (stamperPosition === 'top-left') x = 30;
-          if (stamperPosition === 'top-center') x = (width - textWidth) / 2;
-          if (stamperPosition === 'bottom-right') { x = width - textWidth - 30; y = 25; }
-          if (stamperPosition === 'bottom-left') { x = 30; y = 25; }
-          if (stamperPosition === 'bottom-center') { x = (width - textWidth) / 2; y = 25; }
-
-          page.drawText(text, {
-            x,
-            y,
-            size: stamperFontSize,
-            font: helveticaBold,
-            color: textColor
-          });
-        }
-      }
-
-      // Save modified PDF
-      const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
-      const downloadUrl = URL.createObjectURL(blob);
-
-      // Trigger download
-      const cleanFileName = stamperFile.name.replace(/\.pdf$/i, '');
-      const downloadLink = document.createElement('a');
-      downloadLink.href = downloadUrl;
-      downloadLink.download = `${stamperFolio}_FOLIADO_${cleanFileName}.pdf`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-
-      // Update folio record if matching
-      const targetFolio = folios.find(f => f.folio.toLowerCase() === stamperFolio.trim().toLowerCase());
-      if (targetFolio) {
-        const updated = folios.map(f => f.id === targetFolio.id ? { ...f, foliado_digital: true } : f);
-        setFolios(updated);
-        persistFoliosLocally(updated);
-
-        if (usingSupabase) {
-          try {
-            await supabase.from('document_folios').update({ foliado_digital: true }).eq('id', targetFolio.id);
-          } catch (err) {
-            console.warn(err);
-          }
-        }
-      }
-
-      setStampedPageCount(pageIndicesToStamp.length);
-      setStampedSuccess(`¡Documento foliado exitosamente! Se procesaron ${pageIndicesToStamp.length} página(s) y el archivo fue descargado.`);
-
-    } catch (err: any) {
-      console.error('Error al estampar PDF:', err);
-      alert('Error al procesar el PDF: ' + err.message);
-    } finally {
-      setIsStamping(false);
-    }
   };
 
   // ── SQL Script text for manual setup in Supabase ──────────────────────────
@@ -719,17 +475,7 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Stamp size={14} /> Estampador PDF
-            </button>
-            <button
-              onClick={() => setActiveTab('editor_visual')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
-                activeTab === 'editor_visual'
-                  ? 'bg-[#581c2f] text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Sparkles size={14} /> Editor Visual (Logo PNG)
+              <Stamp size={14} /> Estampador
             </button>
             <button
               onClick={() => setActiveTab('sql')}
@@ -1007,289 +753,48 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
         </div>
       )}
 
-      {/* ── TAB 2: ESTAMPADOR DIGITAL DE PDF ─────────────────────────────── */}
+      {/* ── TAB 2: ESTAMPADOR (EDITOR VISUAL MULTI-PDF Y DESCARGAS) ──────── */}
       {activeTab === 'estampador' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Controls Form */}
-          <div className={`lg:col-span-7 p-6 rounded-2xl border ${cardBg} shadow-sm space-y-5`}>
-            <div className="border-b pb-3 border-slate-100 dark:border-slate-800 flex justify-between items-center">
-              <div>
-                <h3 className={`text-base font-extrabold ${textTitle}`}>
-                  Estampado y Foliado Digital de PDF
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Inserta de forma indeleble el número de folio, fecha y membrete oficial en cada página.
-                </p>
-              </div>
-              <Stamp size={20} className="text-[#6b1c35] dark:text-[#b39656]" />
-            </div>
-
-            {/* 1. Upload PDF */}
-            <div>
-              <label className={`block text-xs font-bold uppercase mb-2 ${textMuted}`}>
-                1. Selecciona el archivo PDF a foliar:
-              </label>
-              <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-6 text-center hover:border-[#6b1c35] dark:hover:border-[#b39656] transition-colors bg-slate-50/50 dark:bg-slate-800/30">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={e => {
-                    if (e.target.files && e.target.files[0]) {
-                      setStamperFile(e.target.files[0]);
-                      setStampedSuccess(null);
-                    }
-                  }}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <Upload size={32} className="mx-auto mb-2 text-slate-400" />
-                {stamperFile ? (
-                  <div>
-                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                      ✓ {stamperFile.name}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {(stamperFile.size / 1024 / 1024).toFixed(2)} MB • Haz clic para cambiar de archivo
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Arrastra tu PDF aquí o haz clic para seleccionarlo
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Formatos soportados: Documentos PDF (sin límite de páginas)
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 2. Folio To Stamp */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={`block text-xs font-bold uppercase mb-1.5 ${textMuted}`}>
-                  2. Número de Folio a Estampar:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={stamperFolio}
-                    onChange={e => setStamperFolio(e.target.value.toUpperCase())}
-                    placeholder="Ej. FOL-2026-0001"
-                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-mono font-bold border ${inputBg}`}
-                  />
-                  {/* Shortcut to select from existing */}
-                  {folios.length > 0 && (
-                    <select
-                      onChange={e => {
-                        if (e.target.value) setStamperFolio(e.target.value);
-                      }}
-                      className={`px-2 py-2 rounded-xl text-xs border ${inputBg}`}
-                      title="Seleccionar de los folios registrados"
-                    >
-                      <option value="">Cargar...</option>
-                      {folios.slice(0, 10).map(f => (
-                        <option key={f.id} value={f.folio}>{f.folio} ({f.tipo_documento})</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              {/* Position */}
-              <div>
-                <label className={`block text-xs font-bold uppercase mb-1.5 ${textMuted}`}>
-                  3. Posición del Sello:
-                </label>
-                <select
-                  value={stamperPosition}
-                  onChange={e => setStamperPosition(e.target.value as any)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border ${inputBg}`}
-                >
-                  <option value="top-right">Superior Derecha (Estándar de Oficios)</option>
-                  <option value="top-left">Superior Izquierda</option>
-                  <option value="top-center">Encabezado Central</option>
-                  <option value="bottom-right">Inferior Derecha</option>
-                  <option value="bottom-left">Inferior Izquierda</option>
-                  <option value="bottom-center">Pie de Página Central</option>
-                </select>
-              </div>
-            </div>
-
-            {/* 3. Style Options */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={`block text-xs font-bold uppercase mb-1.5 ${textMuted}`}>
-                  Formato de Sello:
-                </label>
-                <select
-                  value={stamperFormat}
-                  onChange={e => setStamperFormat(e.target.value as any)}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${inputBg}`}
-                >
-                  <option value="boxed">Sello Institucional Completo</option>
-                  <option value="line">Línea Ejecutiva de Folio</option>
-                  <option value="simple">Folio Simple</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={`block text-xs font-bold uppercase mb-1.5 ${textMuted}`}>
-                  Color de Tinta:
-                </label>
-                <select
-                  value={stamperColor}
-                  onChange={e => setStamperColor(e.target.value as any)}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${inputBg}`}
-                >
-                  <option value="guinda">Guinda Institucional</option>
-                  <option value="dorado">Dorado Oficial</option>
-                  <option value="negro">Negro Documental</option>
-                  <option value="azul">Azul Registro</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={`block text-xs font-bold uppercase mb-1.5 ${textMuted}`}>
-                  Páginas a Foliar:
-                </label>
-                <select
-                  value={stamperPageRange}
-                  onChange={e => setStamperPageRange(e.target.value as any)}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${inputBg}`}
-                >
-                  <option value="all">Todas las páginas</option>
-                  <option value="first">Solo la primera página</option>
-                  <option value="custom">Rango específico...</option>
-                </select>
-              </div>
-            </div>
-
-            {stamperPageRange === 'custom' && (
-              <div className="animate-fade-in">
-                <label className={`block text-xs font-bold uppercase mb-1 ${textMuted}`}>
-                  Especifica las páginas (ej. 1-3, 5):
-                </label>
-                <input
-                  type="text"
-                  value={customPageRange}
-                  onChange={e => setCustomPageRange(e.target.value)}
-                  placeholder="1-3, 5, 8"
-                  className={`w-full px-3 py-2 rounded-xl text-xs border ${inputBg}`}
-                />
-              </div>
-            )}
-
-            {/* Action button */}
-            <div className="pt-2">
-              <button
-                onClick={handleStampPDF}
-                disabled={!stamperFile || !stamperFolio.trim() || isStamping}
-                className="w-full bg-gradient-to-r from-[#6b1c35] to-[#581c2f] hover:from-[#581c2f] hover:to-[#401321] text-white py-3.5 px-6 rounded-xl font-bold text-sm shadow-lg shadow-[#6b1c35]/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {isStamping ? (
-                  <>
-                    <RefreshCw size={18} className="animate-spin" /> Procesando y Estampando PDF...
-                  </>
-                ) : (
-                  <>
-                    <Stamp size={18} /> Estampar Folio y Descargar PDF Foliado
-                  </>
-                )}
-              </button>
-            </div>
-
-            {stampedSuccess && (
-              <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-medium flex items-start gap-2.5 animate-fade-in">
-                <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">¡Foliado Exitoso!</p>
-                  <p className="mt-0.5">{stampedSuccess}</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Preview Explanation Card */}
-          <div className={`lg:col-span-5 p-6 rounded-2xl border ${cardBg} shadow-sm space-y-4`}>
-            <h4 className={`text-sm font-black uppercase tracking-wider ${textTitle}`}>
-              Muestra Visual del Sello
-            </h4>
-            <p className="text-xs text-slate-500">
-              Así es como se estampará el sello en el encabezado de tu documento:
-            </p>
-
-            {/* Visual simulation of the seal */}
-            <div className="p-6 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center min-h-[180px]">
-              {stamperFormat === 'boxed' ? (
-                <div
-                  className={`p-3.5 rounded-lg border text-left shadow-sm max-w-xs ${
-                    stamperColor === 'guinda'
-                      ? 'border-[#6b1c35] bg-[#6b1c35]/5 text-[#6b1c35]'
-                      : stamperColor === 'dorado'
-                      ? 'border-[#b39656] bg-[#b39656]/5 text-[#b39656]'
-                      : stamperColor === 'azul'
-                      ? 'border-blue-600 bg-blue-50 text-blue-800'
-                      : 'border-slate-900 bg-slate-100 text-slate-900 dark:border-white dark:bg-slate-800 dark:text-white'
-                  }`}
-                >
-                  <p className="text-[9px] font-black uppercase tracking-wider">
-                    PAZSUMA — SISTEMA INSTITUCIONAL
-                  </p>
-                  <p className="text-sm font-mono font-black mt-1">
-                    FOLIO: {stamperFolio || 'FOL-2026-0001'}
-                  </p>
-                  <p className="text-[9px] text-slate-500 dark:text-slate-400 mt-1">
-                    FECHA: {new Date().toLocaleDateString('es-MX')} | PÁG. 1 DE N
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center font-mono font-bold text-xs p-3 rounded bg-white dark:bg-slate-800 border">
-                  FOLIO: {stamperFolio || 'FOL-2026-0001'} • PÁG. 1 DE N
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <Check size={14} className="text-emerald-500" />
-                <span>100% procesado en el navegador (seguro y confidencial).</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check size={14} className="text-emerald-500" />
-                <span>No altera el contenido original ni los textos del documento.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check size={14} className="text-emerald-500" />
-                <span>Conteo exacto y dinámico de páginas ("Pág. 1 de 5", etc.).</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── TAB 3: EDITOR VISUAL CON LOGO PNG ──────────────────────────────── */}
-      {activeTab === 'editor_visual' && (
         <div className={`p-6 rounded-2xl border ${cardBg} shadow-sm`}>
           <FolioVisualEditor
-            initialFolio={folios.length > 0 ? `OFI-2026-${String(folios.length + 1).padStart(4, '0')}` : 'OFI-2026-0001'}
-            onFolioSaved={(newFolio) => {
-              // Actualizar lista local de folios si se genera un documento
+            initialFolio={generateNextFolioNumber(prefijo)}
+            availableFolios={folios.map(f => ({ id: f.id, folio: f.folio, tipo_documento: f.tipo_documento }))}
+            isDark={isDark}
+            onFolioSaved={(data) => {
               const folioItem: DocumentFolio = {
                 id: `fol-${Date.now()}`,
-                folio: newFolio.folio,
+                folio: data.folio,
                 tipo_documento: 'Oficio',
-                asunto: 'Documento sellado digitalmente con logotipo oficial',
+                asunto: `Documento(s) sellado digitalmente con logotipo oficial (${data.archivos_procesados || 1} archivo(s))`,
                 remitente: userName || 'Dirección PazSuma',
                 destinatario: 'Padrón General',
                 fecha_documento: new Date().toISOString(),
                 estatus: 'registrado',
                 prioridad: 'normal',
-                archivo_nombre: newFolio.archivo_nombre,
+                archivo_nombre: data.archivo_nombre,
                 foliado_digital: true,
                 created_at: new Date().toISOString()
               };
-              setFolios(prev => [folioItem, ...prev]);
+              const updated = [folioItem, ...folios];
+              setFolios(updated);
+              persistFoliosLocally(updated);
+
+              if (usingSupabase) {
+                supabase.from('document_folios').insert([{
+                  folio: folioItem.folio,
+                  tipo_documento: folioItem.tipo_documento,
+                  asunto: folioItem.asunto,
+                  remitente: folioItem.remitente,
+                  destinatario: folioItem.destinatario,
+                  estatus: folioItem.estatus,
+                  prioridad: folioItem.prioridad,
+                  archivo_nombre: folioItem.archivo_nombre,
+                  foliado_digital: true,
+                  creador_email: userEmail || 'operador@pazsuma.gob.mx'
+                }]).then(({ error }) => {
+                  if (error) console.warn('Supabase sync notice:', error.message);
+                });
+              }
             }}
           />
         </div>

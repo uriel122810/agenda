@@ -342,53 +342,92 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   // ── Pipelines Fetchers
   const fetchProjects = useCallback(async () => {
     if (!userEmail) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('projects')
       .select('*')
-      .order('creado_en', { ascending: false });
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error al cargar proyectos:', error);
+      return;
+    }
 
     if (data) {
-      const filtered = (data as Project[]).filter(proj => 
-        proj.creador_email === userEmail ||
-        proj.visibility === 'global' ||
-        (proj.compartido_con && proj.compartido_con.includes(userEmail))
-      );
-      setProjects(filtered);
+      const mapped = data.map((proj: any) => ({
+        ...proj,
+        title: proj.title || proj.name || 'Sin título',
+        creado_en: proj.created_at || proj.creado_en,
+        creador_email: proj.creador_email || userEmail,
+        visibility: proj.visibility || 'Public',
+      }));
+      setProjects(mapped as Project[]);
     }
   }, [supabase, userEmail]);
 
   const fetchPipelineTasks = useCallback(async (projectId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('project_id', projectId)
-      .order('creado_en', { ascending: true });
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error al cargar tareas:', error);
+      return;
+    }
 
     if (data) {
-      setPipelineTasks(data as PipelineTask[]);
+      const mapped = data.map((t: any) => ({
+        ...t,
+        assignee_email: t.assignee_email || null,
+        creado_en: t.created_at || t.creado_en,
+      }));
+      setPipelineTasks(mapped as PipelineTask[]);
     }
   }, [supabase]);
 
   const fetchComments = useCallback(async (taskId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('comments')
       .select('*')
       .eq('task_id', taskId)
-      .order('creado_en', { ascending: true });
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error al cargar comentarios:', error);
+      return;
+    }
 
     if (data) {
-      setComments(data as PipelineComment[]);
+      const mapped = data.map((c: any) => ({
+        ...c,
+        user_email: c.user_email || userName || userEmail || 'Usuario',
+        creado_en: c.created_at || c.creado_en,
+      }));
+      setComments(mapped as PipelineComment[]);
     }
-  }, [supabase]);
+  }, [supabase, userName, userEmail]);
 
   const fetchProjectDelays = useCallback(async (projectId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('project_delay_history')
       .select('*')
       .eq('project_id', projectId)
-      .order('created_at', { ascending: true });
+      .order('changed_at', { ascending: true });
     
-    if (data) setActiveProjectDelays(data as ProjectDelay[]);
+    if (error) {
+      console.error('Error al cargar historial de retrasos:', error);
+      return;
+    }
+
+    if (data) {
+      const mapped = data.map((d: any) => ({
+        ...d,
+        old_date: d.old_date || d.previous_date,
+        created_at: d.changed_at || d.created_at,
+      }));
+      setActiveProjectDelays(mapped as ProjectDelay[]);
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -464,26 +503,26 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const handleAddProjectPipeline = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectData.title.trim() || !newProjectData.customer.trim() || !newProjectData.estimated_delivery) {
-      alert("Please fill all required fields including Estimated Delivery.");
+      alert("Por favor completa los campos requeridos incluyendo Fecha Estimada.");
       return;
     }
 
     const payload = {
-      title: newProjectData.title,
-      customer: newProjectData.customer,
-      status: newProjectData.status,
-      budget_type: newProjectData.budget_type,
-      billing_method: newProjectData.billing_method,
+      name: newProjectData.title.trim(),
+      customer: newProjectData.customer.trim(),
+      status: newProjectData.status || 'Active',
+      budget_type: newProjectData.budget_type || null,
+      billing_method: newProjectData.billing_method || null,
       estimated_delivery: newProjectData.estimated_delivery,
       original_delivery: newProjectData.estimated_delivery,
-      creador_email: userEmail,
-      visibility: 'personal' // Default visibility
+      created_by: user?.id || null,
+      visibility: 'Public'
     };
 
     const { error } = await supabase.from('projects').insert([payload]);
     if (error) {
-      console.error(error);
-      alert('Error al crear proyecto');
+      console.error('Error al crear proyecto:', error);
+      alert('Error al crear proyecto: ' + error.message);
     } else {
       setIsAddProjectModalOpen(false);
       setNewProjectData({ title: '', customer: '', status: 'Active', budget_type: '', billing_method: '', estimated_delivery: '' });
@@ -497,23 +536,25 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
     // Update project
     const { error: updateError } = await supabase.from('projects').update({ estimated_delivery: newDate }).eq('id', projectId);
     if (updateError) {
-      console.error(updateError);
-      alert("Error updating project date.");
+      console.error('Error actualizando fecha:', updateError);
+      alert("Error al actualizar la fecha del proyecto.");
       return;
     }
     
     // Log delay
     const { error: logError } = await supabase.from('project_delay_history').insert([{
       project_id: projectId,
-      old_date: oldDate,
-      new_date: newDate
+      previous_date: oldDate,
+      new_date: newDate,
+      changed_by: user?.id || null
     }]);
     
     if (logError) {
-      console.error("Warning: Could not log delay history.", logError);
+      console.warn("Aviso: No se pudo registrar el historial de retraso.", logError);
     }
     
     fetchProjects();
+    fetchProjectDelays(projectId);
     if (activeProject && activeProject.id === projectId) {
       setActiveProject({ ...activeProject, estimated_delivery: newDate });
     }
@@ -527,16 +568,15 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
     const payload = {
       project_id: activeProject.id,
       column_name: addTaskColumn,
-      title: newTaskTitle,
+      title: newTaskTitle.trim(),
       status: 'pending',
-      priority: 'Medium',
-      creador_email: userEmail
+      priority: 'Medium'
     };
 
     const { error } = await supabase.from('tasks').insert([payload]);
     if (error) {
-      console.error(error);
-      alert('Error al crear tarea');
+      console.error('Error al crear tarea:', error);
+      alert('Error al crear tarea: ' + error.message);
     } else {
       setIsAddTaskModalOpen(false);
       setNewTaskTitle('');
@@ -547,8 +587,8 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const handleUpdateTaskPipeline = async (taskId: string, updates: Partial<PipelineTask>) => {
     const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
     if (error) {
-      console.error(error);
-      alert('Error al actualizar tarea');
+      console.error('Error al actualizar tarea:', error);
+      alert('Error al actualizar tarea: ' + error.message);
     } else {
       if (activeProject) fetchPipelineTasks(activeProject.id);
       if (activeTask) setActiveTask(prev => prev ? { ...prev, ...updates } : null);
@@ -561,14 +601,14 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
 
     const payload = {
       task_id: activeTask.id,
-      user_email: userEmail,
-      content: newComment
+      user_id: user?.id || null,
+      content: newComment.trim()
     };
 
     const { error } = await supabase.from('comments').insert([payload]);
     if (error) {
-      console.error(error);
-      alert('Error al enviar comentario');
+      console.error('Error al enviar comentario:', error);
+      alert('Error al enviar comentario: ' + error.message);
     } else {
       setNewComment('');
       fetchComments(activeTask.id);

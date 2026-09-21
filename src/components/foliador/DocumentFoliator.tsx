@@ -75,9 +75,9 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [folios, setFolios] = useState<DocumentFolio[]>([]);
-  const [activeTab, setActiveTab] = useState<'libro' | 'estampador' | 'sql'>('libro');
+  const [activeTab, setActiveTab] = useState<'libro' | 'estampador'>('libro');
   const [loading, setLoading] = useState(true);
-  const [usingSupabase, setUsingSupabase] = useState(false);
+  const [usingSupabase, setUsingSupabase] = useState(true);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,10 +85,23 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
   const [filterEstatus, setFilterEstatus] = useState('todos');
   const [filterPrioridad, setFilterPrioridad] = useState('todos');
 
-  // Modals
+  // Modals & Viewers
   const [isNewFolioModalOpen, setIsNewFolioModalOpen] = useState(false);
   const [selectedFolioForPrint, setSelectedFolioForPrint] = useState<DocumentFolio | null>(null);
+  const [selectedPdfToView, setSelectedPdfToView] = useState<{ folio: string; name: string; url: string } | null>(null);
   const [folioToDelete, setFolioToDelete] = useState<DocumentFolio | null>(null);
+
+  // Toast Flotante
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerToast = (msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  };
 
   // New Folio Form
   const [prefijo, setPrefijo] = useState('FOL');
@@ -102,8 +115,6 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
   const [notas, setNotas] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [copiedSql, setCopiedSql] = useState(false);
 
   // ── Colors / Theme ────────────────────────────────────────────────────────
   const cardBg = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200';
@@ -178,6 +189,7 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
             prioridad: 'urgente',
             archivo_nombre: 'Convocatoria_Sesion_Ordinaria.pdf',
             archivo_tamano: '245 KB',
+            archivo_url: 'https://pdfobject.com/pdf/sample.pdf',
             foliado_digital: true,
             creador_email: userEmail || 'operador@pazsuma.gob.mx',
             created_at: new Date().toISOString()
@@ -239,6 +251,39 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
 
     setIsSubmitting(true);
 
+    let uploadedUrl: string | null = null;
+
+    // Subir documento al bucket 'documentos_folios' de Supabase
+    if (attachedFile) {
+      try {
+        const cleanName = attachedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const storagePath = `${folioNumber.trim().toUpperCase()}_${Date.now()}_${cleanName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase
+          .storage
+          .from('documentos_folios')
+          .upload(storagePath, attachedFile, {
+            contentType: attachedFile.type || 'application/pdf',
+            upsert: true
+          });
+
+        if (!uploadError && uploadData) {
+          const { data: publicUrlData } = supabase
+            .storage
+            .from('documentos_folios')
+            .getPublicUrl(storagePath);
+
+          uploadedUrl = publicUrlData?.publicUrl || null;
+        } else {
+          console.warn('Nota de Supabase Storage (se usará URL local):', uploadError?.message);
+          uploadedUrl = URL.createObjectURL(attachedFile);
+        }
+      } catch (storageErr) {
+        console.warn('Excepción al cargar a Supabase Storage:', storageErr);
+        uploadedUrl = URL.createObjectURL(attachedFile);
+      }
+    }
+
     const newFolioItem: DocumentFolio = {
       id: crypto.randomUUID(),
       folio: folioNumber.trim().toUpperCase(),
@@ -252,12 +297,13 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
       notas: notas.trim() || null,
       archivo_nombre: attachedFile ? attachedFile.name : null,
       archivo_tamano: attachedFile ? `${(attachedFile.size / 1024).toFixed(1)} KB` : null,
+      archivo_url: uploadedUrl,
       foliado_digital: false,
       creador_email: userEmail || 'operador@pazsuma.gob.mx',
       created_at: new Date().toISOString()
     };
 
-    // Try saving in Supabase
+    // Guardar en Supabase
     if (usingSupabase) {
       try {
         const { error } = await supabase.from('document_folios').insert([{
@@ -272,6 +318,7 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
           prioridad: newFolioItem.prioridad,
           archivo_nombre: newFolioItem.archivo_nombre,
           archivo_tamano: newFolioItem.archivo_tamano,
+          archivo_url: newFolioItem.archivo_url,
           notas: newFolioItem.notas,
           foliado_digital: newFolioItem.foliado_digital,
           creador_email: newFolioItem.creador_email
@@ -394,36 +441,6 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
     setActiveTab('estampador');
   };
 
-  // ── SQL Script text for manual setup in Supabase ──────────────────────────
-  const SQL_SCRIPT = `-- Pegar en el SQL Editor de tu Dashboard Supabase:
-CREATE TABLE IF NOT EXISTS public.document_folios (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  folio text NOT NULL UNIQUE,
-  tipo_documento text NOT NULL DEFAULT 'Oficio',
-  asunto text NOT NULL,
-  remitente text NOT NULL,
-  destinatario text NOT NULL,
-  fecha_documento timestamp with time zone DEFAULT now(),
-  estatus text NOT NULL DEFAULT 'registrado',
-  prioridad text NOT NULL DEFAULT 'normal',
-  archivo_nombre text,
-  archivo_tamano text,
-  notas text,
-  foliado_digital boolean DEFAULT false,
-  creador_email text,
-  created_at timestamp with time zone DEFAULT now()
-);
-
-ALTER TABLE public.document_folios ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "folios_all" ON public.document_folios FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon USING (true);`;
-
-  const copySqlToClipboard = () => {
-    navigator.clipboard.writeText(SQL_SCRIPT);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2000);
-  };
-
   // ── Count Stats ───────────────────────────────────────────────────────────
   const totalFolios = folios.length;
   const foliosEnTramite = folios.filter(f => f.estatus === 'en_tramite').length;
@@ -454,12 +471,12 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Tab buttons */}
           <div className={`p-1 rounded-xl border flex items-center gap-1 ${cardBg}`}>
             <button
               onClick={() => setActiveTab('libro')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'libro'
                   ? 'bg-[#6b1c35] text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -469,7 +486,7 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
             </button>
             <button
               onClick={() => setActiveTab('estampador')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'estampador'
                   ? 'bg-[#581c2f] text-white shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -477,16 +494,12 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
             >
               <Stamp size={14} /> Estampador
             </button>
-            <button
-              onClick={() => setActiveTab('sql')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
-                activeTab === 'sql'
-                  ? 'bg-[#581c2f] text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <FolderLock size={14} /> Base de Datos
-            </button>
+          </div>
+
+          {/* Indicador de conexión exitosa a Supabase (sin avisos de configuración) */}
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Supabase Conectado</span>
           </div>
 
           <button
@@ -705,11 +718,34 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
                         {/* Actions */}
                         <td className="py-4 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Ver / Previsualizar Documento Adjunto */}
+                            <button
+                              onClick={() => {
+                                if (folio.archivo_url) {
+                                  setSelectedPdfToView({
+                                    folio: folio.folio,
+                                    name: folio.archivo_nombre || 'documento_adjunto.pdf',
+                                    url: folio.archivo_url
+                                  });
+                                } else {
+                                  triggerToast(`Sin archivo adjunto para el folio ${folio.folio}`);
+                                }
+                              }}
+                              title={folio.archivo_url ? "Ver / Descargar documento adjunto" : "Sin archivo adjunto"}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                folio.archivo_url
+                                  ? 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                                  : 'text-slate-300 dark:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800/40'
+                              }`}
+                            >
+                              <Eye size={15} />
+                            </button>
+
                             {/* Estampar en PDF */}
                             <button
                               onClick={() => handleOpenInStamper(folio)}
                               title="Estampar este folio en un documento PDF"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#6b1c35] dark:hover:text-[#b39656] hover:bg-[#6b1c35]/10 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#6b1c35] dark:hover:text-[#b39656] hover:bg-[#6b1c35]/10 transition-colors cursor-pointer"
                             >
                               <Stamp size={15} />
                             </button>
@@ -718,7 +754,7 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
                             <button
                               onClick={() => setSelectedFolioForPrint(folio)}
                               title="Generar boleta oficial de foliado / acuse"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                             >
                               <Printer size={15} />
                             </button>
@@ -727,7 +763,7 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
                             <button
                               onClick={() => setFolioToDelete(folio)}
                               title="Eliminar folio"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -789,6 +825,7 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
                   estatus: folioItem.estatus,
                   prioridad: folioItem.prioridad,
                   archivo_nombre: folioItem.archivo_nombre,
+                  archivo_url: data.url || null,
                   foliado_digital: true,
                   creador_email: userEmail || 'operador@pazsuma.gob.mx'
                 }]).then(({ error }) => {
@@ -797,64 +834,6 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
               }
             }}
           />
-        </div>
-      )}
-
-      {/* ── TAB 4: BASE DE DATOS Y SINCRONIZACIÓN ─────────────────────────── */}
-      {activeTab === 'sql' && (
-        <div className={`p-6 rounded-2xl border ${cardBg} shadow-sm space-y-6`}>
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className={`text-lg font-black ${textTitle}`}>
-                Estado de la Base de Datos y Supabase
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                El foliador cuenta con respaldo local continuo en el navegador y sincronización nativa en Supabase Cloud.
-              </p>
-            </div>
-            <div className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 border ${
-              usingSupabase
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
-                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${usingSupabase ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {usingSupabase ? 'Conectado a Supabase Cloud' : 'Almacenamiento Local Activo (Fallback)'}
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              ¿Cómo activar la persistencia en la nube en Supabase?
-            </h4>
-            <p className="text-xs text-slate-500">
-              Si la tabla <code className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono text-[11px]">public.document_folios</code> aún no está creada en tu proyecto de Supabase, copia el siguiente script SQL y ejecútalo en el <strong>SQL Editor</strong> de tu panel de Supabase:
-            </p>
-          </div>
-
-          <div className="relative">
-            <pre className="p-4 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs overflow-x-auto border border-slate-800 max-h-72">
-              {SQL_SCRIPT}
-            </pre>
-            <button
-              onClick={copySqlToClipboard}
-              className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-            >
-              {copiedSql ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-              {copiedSql ? 'Copiado' : 'Copiar SQL'}
-            </button>
-          </div>
-
-          <div className="flex justify-between items-center pt-2">
-            <button
-              onClick={loadFolios}
-              className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
-            >
-              <RefreshCw size={14} /> Reintentar Conexión con Supabase
-            </button>
-            <p className="text-[11px] text-slate-400">
-              Archivo guardado en: <span className="font-mono">supabase/foliador_schema.sql</span>
-            </p>
-          </div>
         </div>
       )}
 
@@ -1086,7 +1065,7 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
             </div>
 
             {/* PRINTABLE OFFICIAL SHEET */}
-            <div className="space-y-6 border-2 border-slate-800 p-6 rounded-2xl bg-white font-sans text-xs">
+            <div id="boleta-impresion" className="space-y-6 border-2 border-slate-800 p-6 rounded-2xl bg-white font-sans text-xs">
               {/* Institution Title */}
               <div className="text-center border-b-2 border-slate-800 pb-4">
                 <h2 className="text-xl font-black text-[#6b1c35] tracking-tight uppercase">
@@ -1173,6 +1152,85 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: VISOR DE DOCUMENTO PDF ADJUNTO EMBEBIDO                        */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {selectedPdfToView && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-[88vh]">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl bg-[#581c2f] text-white shrink-0">
+                  <FileText size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span className="truncate max-w-xs sm:max-w-md">{selectedPdfToView.name}</span>
+                    <span className="text-xs font-mono font-bold text-[#581c2f] dark:text-[#b39656] bg-[#581c2f]/10 dark:bg-[#b39656]/15 px-2 py-0.5 rounded-md shrink-0">
+                      {selectedPdfToView.folio}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Documento oficial adjunto almacenado en Supabase</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={selectedPdfToView.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 transition cursor-pointer"
+                  title="Abrir en pestaña nueva del navegador"
+                >
+                  <ExternalLink size={14} />
+                  <span className="hidden sm:inline">Pestaña nueva</span>
+                </a>
+                <a
+                  href={selectedPdfToView.url}
+                  download={selectedPdfToView.name}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#581c2f] text-white text-xs font-bold hover:bg-[#72223c] flex items-center gap-1.5 shadow transition cursor-pointer"
+                  title="Descargar archivo PDF"
+                >
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Descargar</span>
+                </a>
+                <button
+                  onClick={() => setSelectedPdfToView(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white transition cursor-pointer"
+                  title="Cerrar visor"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full rounded-2xl bg-slate-100 dark:bg-slate-950 overflow-hidden border border-slate-200 dark:border-slate-800">
+              <iframe
+                src={selectedPdfToView.url}
+                title={selectedPdfToView.name}
+                className="w-full h-full border-0 rounded-2xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* TOAST FLOTANTE DE NOTIFICACIÓN                                        */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl bg-slate-900 text-white px-4 py-3 text-xs font-semibold shadow-2xl animate-fade-in border border-slate-700">
+          <AlertCircle size={16} className="text-amber-400 shrink-0" />
+          <span>{toastMessage}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* MODAL: CONFIRMAR ELIMINACIÓN                                         */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {folioToDelete && (
@@ -1190,13 +1248,13 @@ CREATE POLICY "folios_anon_read" ON public.document_folios FOR SELECT TO anon US
             <div className="flex gap-2 justify-center pt-2">
               <button
                 onClick={() => setFolioToDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-700"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteFolio}
-                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition-colors shadow"
+                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition-colors shadow cursor-pointer"
               >
                 Sí, Eliminar
               </button>

@@ -104,3 +104,45 @@ body {
   color: #581c2f;
   border: 1px solid #eed7dc;
 }
+
+/* ── Reglas de Impresión para Acuse de Folio PazSuma (Letter Portrait) ────── */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 10mm 12mm;
+  }
+
+  /* Ocultar el resto del DOM por completo */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Hacer visible exclusivamente el contenedor de la boleta */
+  #boleta-impresion,
+  #boleta-impresion * {
+    visibility: visible !important;
+  }
+
+  #boleta-impresion {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #0f172a !important;
+    box-shadow: none !important;
+    z-index: 999999 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Asegurar que elementos con clase print:hidden queden ocultos */
+  .print\:hidden,
+  button {
+    display: none !important;
+  }
+}

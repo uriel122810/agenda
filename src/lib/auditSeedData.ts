@@ -11,11 +11,12 @@ export interface AuditLog {
   email: string;
   date: string;
   relativeTime: string;
-  module: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Contabilidad' | 'Bancos' | 'Contactos' | 'Inventario' | 'Usuarios';
+  module: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Contabilidad' | 'Bancos' | 'Contactos' | 'Inventario' | 'Usuarios' | 'Gastos' | 'Ingresos';
   action: string;
   details?: string;
   ip: string;
   status: 'completado' | 'advertencia' | 'critico';
+  created_at?: string;
 }
 
 const USERS = [

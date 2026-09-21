@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { generate128AuditLogs, AuditLog } from '@/lib/auditSeedData';
+import { getStoredAuditLogs, filterLogsBy15DaysRetention } from '@/lib/auditService';
 
 interface AuditHistoryTableProps {
   searchQuery?: string;
@@ -25,27 +26,77 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
   const [userFilter, setUserFilter] = useState('todos');
   const [statusFilter, setStatusFilter] = useState('todos');
 
-  // Inicializa con los 128 eventos completos de auditoría
-  const [logs, setLogs] = useState<AuditLog[]>(() => generate128AuditLogs());
+  // Inicializa con los registros locales y los 128 eventos completos de auditoría (filtrados a 15 días)
+  const [logs, setLogs] = useState<AuditLog[]>(() => {
+    const stored = typeof window !== 'undefined' ? getStoredAuditLogs() : [];
+    const seeds = generate128AuditLogs();
+    const existingIds = new Set(stored.map(s => s.id));
+    const nonDuplicateSeeds = seeds.filter(s => !existingIds.has(s.id));
+    return filterLogsBy15DaysRetention([...stored, ...nonDuplicateSeeds]);
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   // Estados de paginación real
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Carga y sincronización con Supabase (sin límite artificial de 5 filas)
+  // Escuchar eventos reactivos generados por logAuditOperation (ej. al crear pólizas)
+  useEffect(() => {
+    const handleNewAuditLog = (e: Event) => {
+      const customEvent = e as CustomEvent<AuditLog>;
+      if (customEvent.detail) {
+        setLogs(prev => {
+          const newLog = customEvent.detail;
+          const filtered = prev.filter(l => l.id !== newLog.id);
+          return [newLog, ...filtered];
+        });
+        setCurrentPage(1);
+      }
+    };
+
+    window.addEventListener('pazsuma:audit-log', handleNewAuditLog);
+    return () => {
+      window.removeEventListener('pazsuma:audit-log', handleNewAuditLog);
+    };
+  }, []);
+
+  // Carga y sincronización con Supabase (sin límite artificial de 5 filas y con filtro de 15 días)
   const fetchSupabaseLogs = async () => {
     setIsLoading(true);
     const supabase = createSupabaseBrowserClient();
 
     try {
-      // 1. Consulta sin limit(5) a la tabla de auditoría si existe
+      const newLogs: AuditLog[] = [];
+
+      // 1. Consulta a la tabla principal historial_operaciones
+      const { data: histData, error: histError } = await supabase
+        .from('historial_operaciones')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!histError && histData && histData.length > 0) {
+        histData.forEach((d: any) => {
+          newLogs.push({
+            id: d.id || `hist-${d.created_at}`,
+            user: d.usuario || d.user_name || 'Usuario',
+            email: d.user_email || 'usuario@pazsuma.com',
+            date: d.created_at ? new Date(d.created_at).toLocaleString('es-MX') : '20 Sep 2026',
+            relativeTime: 'Reciente',
+            module: (d.modulo as any) || 'Contabilidad',
+            action: d.accion || 'Operación registrada',
+            details: d.detalles || undefined,
+            ip: d.ip_origen || '189.240.12.94 • CDMX',
+            status: d.estatus || 'completado',
+            created_at: d.created_at
+          });
+        });
+      }
+
+      // 2. Consulta a la tabla audit_logs de respaldo
       const { data: auditData, error: auditError } = await supabase
         .from('audit_logs')
         .select('*')
         .order('created_at', { ascending: false });
-
-      const newLogs: AuditLog[] = [];
 
       if (!auditError && auditData && auditData.length > 0) {
         auditData.forEach((d: any) => {
@@ -55,16 +106,17 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
             email: d.user_email || d.email || 'usuario@pazsuma.com',
             date: d.created_at ? new Date(d.created_at).toLocaleString('es-MX') : '20 Sep 2026',
             relativeTime: 'Reciente',
-            module: d.module || 'Foliador',
+            module: (d.module as any) || 'Foliador',
             action: d.action || 'Operación registrada',
             details: d.details || undefined,
             ip: d.ip_origin || d.ip || '189.240.12.94 • CDMX',
-            status: d.status || 'completado'
+            status: d.status || 'completado',
+            created_at: d.created_at
           });
         });
       }
 
-      // 2. Consulta a folios reales en Supabase para integrarlos al historial
+      // 3. Consulta a folios reales en Supabase para integrarlos al historial
       const { data: foliosData } = await supabase
         .from('document_folios')
         .select('*')
@@ -82,16 +134,21 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
             action: `Se estampó folio oficial ${f.folio_number || 'OFI-2026-0042'} con logotipo institucional`,
             details: `Archivo: ${f.document_name || 'documento.pdf'} • ${f.total_pages || 1} página(s) foliadas`,
             ip: '189.240.12.94 • CDMX',
-            status: 'completado'
+            status: 'completado',
+            created_at: f.created_at
           });
         });
       }
 
-      if (newLogs.length > 0) {
+      // 4. Agregar registros almacenados localmente
+      const localLogs = getStoredAuditLogs();
+      const combined = [...newLogs, ...localLogs];
+
+      if (combined.length > 0) {
         setLogs(prev => {
-          const existingIds = new Set(newLogs.map(l => l.id));
+          const existingIds = new Set(combined.map(l => l.id));
           const filteredPrev = prev.filter(p => !existingIds.has(p.id));
-          return [...newLogs, ...filteredPrev];
+          return filterLogsBy15DaysRetention([...combined, ...filteredPrev]);
         });
       }
     } catch (err) {
@@ -208,6 +265,12 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
             Registro detallado de cambios, sellado de documentos, accesos y eventos de seguridad en PazSuma
           </p>
+          
+          {/* Leyenda discreta de política de retención de 15 días */}
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-[#FDFBF9] border border-[#E8E2D9] px-2.5 py-1 rounded-lg w-fit mt-2">
+            <Clock className="h-3.5 w-3.5 text-[#b39656]" />
+            <span>El historial almacena los registros de los últimos 15 días de operación</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -311,6 +374,8 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
                 <option value="Tareas">Tareas</option>
                 <option value="Sellos CSD">Sellos CSD</option>
                 <option value="Contabilidad">Contabilidad</option>
+                <option value="Gastos">Gastos</option>
+                <option value="Ingresos">Ingresos</option>
                 <option value="Bancos">Bancos</option>
                 <option value="Contactos">Contactos</option>
                 <option value="Inventario">Inventario</option>

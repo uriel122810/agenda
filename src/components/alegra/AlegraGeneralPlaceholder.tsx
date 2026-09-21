@@ -19,6 +19,7 @@ import {
   fetchIngresos, saveIngreso
 } from '@/lib/crudService';
 import { generateOfficialReportPdf } from '@/lib/pdfReportGenerator';
+import { logAuditOperation } from '@/lib/auditService';
 
 interface AlegraGeneralPlaceholderProps {
   tab: AlegraTabId;
@@ -151,6 +152,14 @@ export default function AlegraGeneralPlaceholder({
     setIsContactoModalOpen(false);
     setContactoForm({ nombre: '', rfc: '', tipo: 'Cliente', telefono: '', email: '', saldo: '$0.00' });
     showToast(`Contacto ${created.nombre} registrado exitosamente en PazSuma y Supabase.`);
+
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Contactos',
+      accion: `Se registró contacto ${created.nombre} (${created.tipo})`,
+      detalles: `RFC: ${created.rfc} • Teléfono: ${created.telefono} • Saldo: ${created.saldo}`,
+      status: 'completado'
+    });
   };
 
   // 2. Formulario Nuevo Ítem / Inventario
@@ -178,6 +187,14 @@ export default function AlegraGeneralPlaceholder({
     setIsInventarioModalOpen(false);
     setInventarioForm({ codigo: '', nombre: '', clave_sat: '84111500', precio: '', costo: '', existencia: 'Servicio' });
     showToast(`Ítem ${created.nombre} (${created.codigo}) guardado exitosamente en catálogo.`);
+
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Inventario',
+      accion: `Se agregó producto/servicio ${created.codigo} - ${created.nombre}`,
+      detalles: `Clave SAT: ${created.clave_sat} • Precio: ${created.precio} • Existencia: ${created.existencia}`,
+      status: 'completado'
+    });
   };
 
   // 3. Formulario Vincular Cuenta Bancaria
@@ -207,6 +224,14 @@ export default function AlegraGeneralPlaceholder({
     setIsBancoModalOpen(false);
     setBancoForm({ banco: 'BBVA México', numero_cuenta: '', clabe: '', moneda: 'MXN', saldo_inicial: '0.00' });
     showToast(`Cuenta de ${created.banco} vinculada exitosamente con saldo en libros.`);
+
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Bancos',
+      accion: `Se vinculó cuenta bancaria institucional ${created.banco}`,
+      detalles: `No. Cuenta: ${created.numero_cuenta} • Saldo inicial: ${created.saldo_banco}`,
+      status: 'completado'
+    });
   };
 
   // 4. Formulario Registrar Póliza Contable
@@ -238,6 +263,16 @@ export default function AlegraGeneralPlaceholder({
       concepto: '',
       monto: '10000.00'
     });
+
+    // Registrar automáticamente en Historial de Operaciones
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Contabilidad',
+      accion: `Se registró póliza contable ${created.numero_poliza} (${created.tipo})`,
+      detalles: `Concepto: ${created.concepto} • Debe/Haber: ${created.total_debe} • Cuadre: ${created.cuadre}`,
+      status: 'completado'
+    });
+
     showToast(`Póliza contable ${created.numero_poliza} registrada y cuadrada con éxito.`);
   };
 
@@ -274,6 +309,16 @@ export default function AlegraGeneralPlaceholder({
       estado: 'Pagado',
       metodo_pago: 'Transferencia BBVA'
     });
+
+    // Registrar automáticamente en Historial de Operaciones
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Gastos',
+      accion: `Se registró gasto ${created.folio} con proveedor ${created.proveedor}`,
+      detalles: `Categoría: ${created.categoria} • Total: ${created.total} • Método: ${created.metodo_pago || 'Transferencia'}`,
+      status: 'completado'
+    });
+
     showToast(`Gasto ${created.folio} registrado y contabilizado en el estado financiero.`);
   };
 
@@ -308,6 +353,16 @@ export default function AlegraGeneralPlaceholder({
       subtotal: '',
       estado: 'Cobrada'
     });
+
+    // Registrar automáticamente en Historial de Operaciones
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Ingresos',
+      accion: `Se emitió factura/ingreso ${created.folio} a cliente ${created.cliente}`,
+      detalles: `Subtotal: ${created.subtotal} • IVA: ${created.iva} • Total: ${created.total} • Estado: ${created.estado}`,
+      status: 'completado'
+    });
+
     showToast(`Ingreso ${created.folio} emitido y registrado en cuentas por cobrar.`);
   };
 

@@ -5,14 +5,25 @@
 :root {
   --font-inter: 'Inter', system-ui, sans-serif;
 
-  /* Paleta Institucional */
+  /* Paleta Alegra / Fiscally UI */
+  --color-alegra-teal:       #00C9A7;
+  --color-alegra-teal-hover: #00B796;
+  --color-alegra-teal-light: #E6FAF6;
+  --color-alegra-bg:         #F8FAFC;
+  --color-alegra-card:       #FFFFFF;
+  --color-alegra-border:     #E2E8F0;
+  --color-alegra-text-main:  #0F172A;
+  --color-alegra-text-muted: #64748B;
+  --color-alegra-purple:     #8B5CF6;
+
+  /* Paleta Institucional (retrocompatibilidad) */
   --color-guinda:       #6b1c35;
   --color-guinda-dark:  #581c2f;
   --color-dorado:       #b39656;
   --color-dorado-light: #dfd3c3;
   --color-crema:        #f4f1ea;
 
-  --color-success:  #22c55e;
+  --color-success:  #00C9A7;
   --color-warning:  #f59e0b;
   --color-danger:   #ef4444;
 
@@ -23,7 +34,7 @@
 
   /* Scroll */
   scrollbar-width: thin;
-  scrollbar-color: rgba(107,28,53,0.3) transparent;
+  scrollbar-color: rgba(0, 201, 167, 0.3) transparent;
 }
 
 /* ── Reset y Base ─────────────────────────────────────────────────────────── */

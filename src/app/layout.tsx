@@ -10,11 +10,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'PazSuma — Sistema Institucional',
-    template: '%s | PazSuma',
+    default: 'Alegra — Gestión Contable, Tareas y Buzón SAT',
+    template: '%s | Alegra',
   },
-  description: 'Sistema institucional de gestión de tareas, agendas y comunicaciones.',
-  keywords: ['gestión', 'municipal', 'tareas', 'agenda', 'PazSuma'],
+  description: 'Plataforma integral de gestión contable, tareas, sincronización de buzón SAT, opiniones de cumplimiento 32-D y foliado de documentos.',
+  keywords: ['contabilidad', 'SAT', 'facturación', 'CFDI', 'Alegra', 'Fiscally', 'despacho'],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

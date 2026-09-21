@@ -35,6 +35,7 @@ interface DocumentFoliatorProps {
   userEmail?: string;
   userName?: string;
   isDark?: boolean;
+  searchQuery?: string;
 }
 
 const TIPOS_DOCUMENTO = [
@@ -70,7 +71,7 @@ const PRIORIDAD_CONFIG = {
 
 const LOCAL_STORAGE_KEY = 'pazsuma_document_folios_v1';
 
-export default function DocumentFoliator({ userEmail, userName, isDark = false }: DocumentFoliatorProps) {
+export default function DocumentFoliator({ userEmail, userName, isDark = false, searchQuery: externalSearchQuery = '' }: DocumentFoliatorProps) {
   const supabase = createSupabaseBrowserClient();
 
   // ── States ─────────────────────────────────────────────────────────────────
@@ -80,7 +81,11 @@ export default function DocumentFoliator({ userEmail, userName, isDark = false }
   const [usingSupabase, setUsingSupabase] = useState(true);
 
   // Filters & Search
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
+
+  useEffect(() => {
+    setSearchQuery(externalSearchQuery);
+  }, [externalSearchQuery]);
   const [filterTipo, setFilterTipo] = useState('todos');
   const [filterEstatus, setFilterEstatus] = useState('todos');
   const [filterPrioridad, setFilterPrioridad] = useState('todos');

@@ -7,6 +7,8 @@ import {
   Phone, Mail, FileText, Sparkles, ExternalLink
 } from 'lucide-react';
 
+import { generateOpinion32DPdf } from '@/lib/pdfReportGenerator';
+
 export interface ClientData {
   id: string;
   rfc: string;
@@ -32,12 +34,36 @@ export default function ClientDrawer({
   onOpenShareModal
 }: ClientDrawerProps) {
   const [activeTab, setActiveTab] = useState<'fiscal' | 'efirma' | 'csd' | 'cumplimiento'>('fiscal');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleDownload32D = async () => {
+    if (!client) return;
+    try {
+      setIsGeneratingPdf(true);
+      await generateOpinion32DPdf({
+        rfc: client.rfc,
+        razonSocial: client.razonSocial,
+        status32D: client.status32D,
+        opinionDate: client.lastUpdate
+      });
+    } catch (err) {
+      console.error('Error al descargar Opinión 32-D:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   // Estados de carga de e.firma
   const [efirmaCer, setEfirmaCer] = useState<File | null>(null);
   const [efirmaKey, setEfirmaKey] = useState<File | null>(null);
   const [efirmaPassword, setEfirmaPassword] = useState('');
   const [efirmaSaved, setEfirmaSaved] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
+
+  const showStatusNotice = (msg: string) => {
+    setStatusNotice(msg);
+    setTimeout(() => setStatusNotice(null), 4000);
+  };
 
   // Estados de carga de CSD
   const [csdCer, setCsdCer] = useState<File | null>(null);
@@ -112,6 +138,13 @@ export default function ClientDrawer({
 
         {/* Contenido según pestaña */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+          {statusNotice && (
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 animate-in fade-in">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>{statusNotice}</span>
+            </div>
+          )}
+
           {/* PESTAÑA 1: DATOS FISCALES */}
           {activeTab === 'fiscal' && (
             <div className="space-y-4">
@@ -211,11 +244,11 @@ export default function ClientDrawer({
                   type="button"
                   onClick={() => {
                     setEfirmaSaved(true);
-                    alert('E.Firma guardada y validada contra el SAT.');
+                    showStatusNotice('E.Firma guardada y validada contra los controles del SAT exitosamente.');
                   }}
                   className="w-full rounded-xl bg-[#581c2f] py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#72223c]"
                 >
-                  {efirmaSaved ? 'E.Firma Validada' : 'Guardar y Probar e.firma'}
+                  {efirmaSaved ? '✓ E.Firma Validada' : 'Guardar y Probar e.firma'}
                 </button>
               </div>
             </div>
@@ -273,11 +306,11 @@ export default function ClientDrawer({
                   type="button"
                   onClick={() => {
                     setCsdSaved(true);
-                    alert('Certificado CSD guardado y listo para timbrado.');
+                    showStatusNotice('Certificado CSD cargado y listo para timbrado fiscal.');
                   }}
                   className="w-full rounded-xl bg-[#581c2f] py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#72223c]"
                 >
-                  {csdSaved ? 'Sello CSD Activo' : 'Guardar Sello CSD'}
+                  {csdSaved ? '✓ Sello CSD Activo' : 'Guardar Sello CSD'}
                 </button>
               </div>
             </div>
@@ -302,11 +335,12 @@ export default function ClientDrawer({
                 <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => alert(`Descargando Constancia 32-D oficial para ${client.rfc}...`)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8E2D9] bg-[#FDFBF9] px-3 py-1.5 text-xs font-bold text-[#581c2f] hover:bg-[#FBF0F3]"
+                    onClick={handleDownload32D}
+                    disabled={isGeneratingPdf}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8E2D9] bg-[#FDFBF9] px-3 py-1.5 text-xs font-bold text-[#581c2f] hover:bg-[#FBF0F3] transition disabled:opacity-50"
                   >
                     <Download className="h-3.5 w-3.5" />
-                    <span>Descargar PDF Oficial</span>
+                    <span>{isGeneratingPdf ? 'Generando PDF...' : 'Descargar PDF Oficial'}</span>
                   </button>
 
                   {onOpenShareModal && (

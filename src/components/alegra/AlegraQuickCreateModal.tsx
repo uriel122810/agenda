@@ -3,7 +3,8 @@
 import React from 'react';
 import {
   X, Plus, FileText, ShoppingCart, Users, CheckSquare,
-  Stamp, Calculator, ArrowUpRight, Sparkles, Receipt
+  Stamp, Calculator, ArrowUpRight, Sparkles, Receipt,
+  ArrowUpCircle, ArrowDownCircle, Package, Landmark
 } from 'lucide-react';
 import { AlegraTabId } from './AlegraSidebar';
 
@@ -44,24 +45,68 @@ export default function AlegraQuickCreateModal({
       }
     },
     {
-      id: 'task',
-      title: 'Nueva Tarea Institucional',
-      subtitle: 'Asignar actividad o cierre operativo',
-      icon: CheckSquare,
-      color: 'bg-emerald-50 text-emerald-700',
+      id: 'gasto',
+      title: 'Registrar Gasto / Compra',
+      subtitle: 'Añadir comprobante de egreso o proveedor',
+      icon: ArrowUpCircle,
+      color: 'bg-rose-50 text-rose-700',
       action: () => {
-        onSelectTab('tareas');
+        onSelectTab('gastos');
         onClose();
       }
     },
     {
-      id: 'rfc',
-      title: 'Añadir Expediente / RFC',
-      subtitle: 'Registrar nuevo contribuyente con IA',
+      id: 'contacto',
+      title: 'Nuevo Contacto / Contribuyente',
+      subtitle: 'Padrón de clientes, proveedores y RFC',
       icon: Users,
-      color: 'bg-[#FDFBF9] text-[#581c2f] border border-[#E8E2D9]',
+      color: 'bg-blue-50 text-blue-700',
       action: () => {
-        onSelectTab('espacio_trabajo');
+        onSelectTab('contactos');
+        onClose();
+      }
+    },
+    {
+      id: 'inventario',
+      title: 'Nuevo Ítem o Servicio',
+      subtitle: 'Catálogo de bienes con clave SAT',
+      icon: Package,
+      color: 'bg-emerald-50 text-emerald-700',
+      action: () => {
+        onSelectTab('inventario');
+        onClose();
+      }
+    },
+    {
+      id: 'banco',
+      title: 'Vincular Cuenta Bancaria',
+      subtitle: 'Registrar cuenta CLABE institucional',
+      icon: Landmark,
+      color: 'bg-amber-50 text-amber-700',
+      action: () => {
+        onSelectTab('bancos');
+        onClose();
+      }
+    },
+    {
+      id: 'poliza',
+      title: 'Registrar Póliza Contable',
+      subtitle: 'Asientos de diario, ingresos o egresos',
+      icon: Calculator,
+      color: 'bg-purple-50 text-purple-700',
+      action: () => {
+        onSelectTab('contabilidad');
+        onClose();
+      }
+    },
+    {
+      id: 'task',
+      title: 'Nueva Tarea Institucional',
+      subtitle: 'Asignar actividad o cierre operativo',
+      icon: CheckSquare,
+      color: 'bg-teal-50 text-teal-700',
+      action: () => {
+        onSelectTab('tareas');
         onClose();
       }
     },
@@ -70,32 +115,10 @@ export default function AlegraQuickCreateModal({
       title: 'Cargar Certificado SAT (CSD)',
       subtitle: 'Conectar sellos digitales .cer y .key',
       icon: Receipt,
-      color: 'bg-amber-50 text-amber-700',
+      color: 'bg-[#FDFBF9] text-[#581c2f] border border-[#E8E2D9]',
       action: () => {
         onClose();
         onOpenCSDModal();
-      }
-    },
-    {
-      id: 'buzon',
-      title: 'Revisar Buzón SAT',
-      subtitle: 'Descargar notificaciones y opiniones 32-D',
-      icon: FileText,
-      color: 'bg-blue-50 text-blue-700',
-      action: () => {
-        onSelectTab('buzon_sat');
-        onClose();
-      }
-    },
-    {
-      id: 'reporte',
-      title: 'Generar Reporte o Balanza',
-      subtitle: 'Exportar estados financieros a Excel/PDF',
-      icon: Calculator,
-      color: 'bg-purple-50 text-purple-700',
-      action: () => {
-        onSelectTab('reportes');
-        onClose();
       }
     }
   ];

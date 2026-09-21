@@ -16,6 +16,7 @@ interface AlegraHeaderProps {
   onLogout?: () => void;
   activeWorkspace?: string;
   onWorkspaceChange?: (workspace: string) => void;
+  searchQuery?: string;
   onSearch?: (query: string) => void;
   onOpenNotifications?: () => void;
 }
@@ -28,10 +29,15 @@ export default function AlegraHeader({
   onLogout,
   activeWorkspace = 'Espacio Central PazSuma',
   onWorkspaceChange,
+  searchQuery: externalSearchQuery = '',
   onSearch,
   onOpenNotifications
 }: AlegraHeaderProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
+
+  useEffect(() => {
+    setSearchQuery(externalSearchQuery);
+  }, [externalSearchQuery]);
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isAppsMenuOpen, setIsAppsMenuOpen] = useState(false);

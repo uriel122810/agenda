@@ -6,6 +6,7 @@ import {
   Trash2, Users, Search, RefreshCw, AlertCircle, Clock,
   FileText, ShieldCheck, ChevronRight, Download
 } from 'lucide-react';
+import { generateBuzonNotificationPdf } from '@/lib/pdfReportGenerator';
 
 interface BuzonMessage {
   id: string;
@@ -284,12 +285,23 @@ export default function AlegraBuzonSAT() {
                     <div className="flex items-center gap-4 text-xs text-slate-400">
                       <span>{msg.date}</span>
                       <button
-                        onClick={e => {
+                        onClick={async e => {
                           e.stopPropagation();
-                          alert(`Descargando notificación oficial SAT para ${msg.rfc}...`);
+                          try {
+                            await generateBuzonNotificationPdf({
+                              id: msg.id,
+                              title: msg.title,
+                              rfc: msg.rfc,
+                              sender: 'Servicio de Administración Tributaria (SAT)',
+                              date: msg.date,
+                              preview: `Notificación de Acto Administrativo formal para el contribuyente ${msg.razonSocial} (${msg.rfc}). Comunicado oficial emitido a través del Buzón Tributario.`
+                            });
+                          } catch (err) {
+                            console.error('Error al descargar notificación SAT:', err);
+                          }
                         }}
                         className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition"
-                        title="Descargar PDF/XML"
+                        title="Descargar Acuse Oficial en PDF"
                       >
                         <Download className="h-4 w-4" />
                       </button>

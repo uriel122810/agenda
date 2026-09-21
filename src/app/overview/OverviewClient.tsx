@@ -18,6 +18,7 @@ import AlegraGeneralPlaceholder from '@/components/alegra/AlegraGeneralPlacehold
 import AuditHistoryTable from '@/components/alegra/AuditHistoryTable';
 import NotificationDrawer from '@/components/alegra/NotificationDrawer';
 import DocumentFoliator from '@/components/foliador/DocumentFoliator';
+import { CheckCircle2, X } from 'lucide-react';
 
 interface Props {
   user: any;
@@ -33,11 +34,18 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [currentTab, setCurrentTab] = useState<AlegraTabId>('inicio');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState('Espacio Central PazSuma');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   // Modales y Drawers
   const [isCSDModalOpen, setIsCSDModalOpen] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [globalToast, setGlobalToast] = useState<string | null>(null);
+
+  const showGlobalToast = (msg: string) => {
+    setGlobalToast(msg);
+    setTimeout(() => setGlobalToast(null), 4000);
+  };
 
   // Manejador de logout seguro
   const handleLogout = async () => {
@@ -65,7 +73,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
 
       {/* 2. Contenedor principal con Header sticky y vistas dinámicas */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Barra superior institucional */}
+        {/* Barra superior institucional con buscador global */}
         <AlegraHeader
           onOpenQuickCreate={() => setIsQuickCreateOpen(true)}
           onSelectTab={tab => setCurrentTab(tab)}
@@ -75,7 +83,8 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           onLogout={handleLogout}
           activeWorkspace={activeWorkspace}
           onWorkspaceChange={ws => setActiveWorkspace(ws)}
-          onSearch={q => console.log('Búsqueda PazSuma:', q)}
+          searchQuery={globalSearchQuery}
+          onSearch={q => setGlobalSearchQuery(q)}
         />
 
         {/* Área de contenido scrollable */}
@@ -102,7 +111,9 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           {currentTab === 'buzon_sat' && <AlegraBuzonSAT />}
 
           {/* Módulo 4: Espacio de trabajo / Cartera de RFCs */}
-          {currentTab === 'espacio_trabajo' && <AlegraWorkspaces />}
+          {currentTab === 'espacio_trabajo' && (
+            <AlegraWorkspaces searchQuery={globalSearchQuery} />
+          )}
 
           {/* Módulo 5: Gestión de tareas (Kanban + Lista) */}
           {currentTab === 'tareas' && <AlegraTaskManager />}
@@ -127,18 +138,23 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                 </div>
               </div>
               <div className="rounded-2xl border border-[#E8E2D9] bg-white p-6 shadow-xs">
-                <DocumentFoliator />
+                <DocumentFoliator searchQuery={globalSearchQuery} />
               </div>
             </div>
           )}
 
           {/* Módulo 8: Centro de Reportes y Balanzas */}
           {currentTab === 'reportes' && (
-            <AlegraReports onOpenCSDModal={() => setIsCSDModalOpen(true)} />
+            <AlegraReports
+              onOpenCSDModal={() => setIsCSDModalOpen(true)}
+              searchQuery={globalSearchQuery}
+            />
           )}
 
           {/* Módulo 9: Historial de Operaciones y Auditoría */}
-          {currentTab === 'historial' && <AuditHistoryTable />}
+          {currentTab === 'historial' && (
+            <AuditHistoryTable searchQuery={globalSearchQuery} />
+          )}
 
           {/* Módulos secundarios: Ingresos, Gastos, Contactos, Inventario, Bancos, Contabilidad, Configuración */}
           {(currentTab === 'ingresos' ||
@@ -152,6 +168,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
               tab={currentTab}
               onOpenQuickCreate={() => setIsQuickCreateOpen(true)}
               onOpenCSDModal={() => setIsCSDModalOpen(true)}
+              searchQuery={globalSearchQuery}
             />
           )}
         </main>
@@ -168,7 +185,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
       <AlegraCSDModal
         isOpen={isCSDModalOpen}
         onClose={() => setIsCSDModalOpen(false)}
-        onSuccess={() => alert('Certificado SAT configurado y validado exitosamente en PazSuma.')}
+        onSuccess={() => showGlobalToast('Certificado SAT CSD configurado y validado exitosamente en PazSuma.')}
       />
 
       {/* Modal Creación Rápida (+) */}
@@ -178,6 +195,17 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
         onSelectTab={tab => setCurrentTab(tab)}
         onOpenCSDModal={() => setIsCSDModalOpen(true)}
       />
+
+      {/* Toast Institucional Global */}
+      {globalToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-[#581c2f] px-5 py-3.5 text-white shadow-2xl animate-in slide-in-from-bottom duration-300 border border-[#b39656]/30">
+          <CheckCircle2 className="h-5 w-5 text-[#b39656]" />
+          <span className="text-xs font-semibold">{globalToast}</span>
+          <button onClick={() => setGlobalToast(null)} className="ml-2 text-white/70 hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

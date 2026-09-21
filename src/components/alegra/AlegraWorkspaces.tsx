@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2, Plus, Search, Filter, ShieldCheck, AlertTriangle,
   Clock, CheckCircle, ExternalLink, Sparkles, UploadCloud,
@@ -21,7 +21,11 @@ interface ClientRFC {
   lastUpdate: string;
 }
 
-export default function AlegraWorkspaces() {
+interface AlegraWorkspacesProps {
+  searchQuery?: string;
+}
+
+export default function AlegraWorkspaces({ searchQuery: externalSearchQuery = '' }: AlegraWorkspacesProps = {}) {
   const [clients, setClients] = useState<ClientRFC[]>([
     {
       id: 'cli-1',
@@ -55,7 +59,12 @@ export default function AlegraWorkspaces() {
     }
   ]);
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
+
+  useEffect(() => {
+    setSearchQuery(externalSearchQuery);
+  }, [externalSearchQuery]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Estados de Drawer y Modal Compartir

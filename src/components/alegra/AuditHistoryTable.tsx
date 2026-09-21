@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, Search, Filter, Calendar, Download, RefreshCw,
   User, Clock, AlertTriangle, CheckCircle2, Lock, Eye,
@@ -20,8 +20,17 @@ interface AuditLog {
   status: 'completado' | 'advertencia' | 'critico';
 }
 
-export default function AuditHistoryTable() {
-  const [searchQuery, setSearchQuery] = useState('');
+interface AuditHistoryTableProps {
+  searchQuery?: string;
+}
+
+export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '' }: AuditHistoryTableProps = {}) {
+  const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
+
+  useEffect(() => {
+    setSearchQuery(externalSearchQuery);
+  }, [externalSearchQuery]);
+
   const [moduleFilter, setModuleFilter] = useState('todos');
   const [userFilter, setUserFilter] = useState('todos');
 

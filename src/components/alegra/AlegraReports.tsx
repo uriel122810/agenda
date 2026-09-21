@@ -24,11 +24,14 @@ interface ReportCategory {
   reports: ReportItem[];
 }
 
+import { generateOfficialReportPdf } from '@/lib/pdfReportGenerator';
+
 interface AlegraReportsProps {
   onOpenCSDModal: () => void;
+  searchQuery?: string;
 }
 
-export default function AlegraReports({ onOpenCSDModal }: AlegraReportsProps) {
+export default function AlegraReports({ onOpenCSDModal, searchQuery = '' }: AlegraReportsProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('todas');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
@@ -94,18 +97,36 @@ export default function AlegraReports({ onOpenCSDModal }: AlegraReportsProps) {
     }
   ];
 
-  const handleDownload = (report: ReportItem) => {
-    setDownloadingId(report.id);
-    setTimeout(() => {
+  const handleDownload = async (report: ReportItem) => {
+    try {
+      setDownloadingId(report.id);
+      await generateOfficialReportPdf({
+        id: report.id,
+        name: report.name,
+        description: report.description,
+        category: selectedCategory,
+        format: report.format
+      });
+    } catch (err) {
+      console.error('Error al generar reporte PDF:', err);
+    } finally {
       setDownloadingId(null);
-      alert(`Reporte institucional "${report.name}" descargado en formato ${report.format}.`);
-    }, 700);
+    }
   };
 
-  const displayedCategories =
-    selectedCategory === 'todas'
-      ? categories
-      : categories.filter(c => c.id === selectedCategory);
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const displayedCategories = categories
+    .filter(c => selectedCategory === 'todas' || c.id === selectedCategory)
+    .map(category => {
+      if (!normalizedSearch) return category;
+      const filteredReports = category.reports.filter(r =>
+        r.name.toLowerCase().includes(normalizedSearch) ||
+        r.description.toLowerCase().includes(normalizedSearch) ||
+        category.name.toLowerCase().includes(normalizedSearch)
+      );
+      return { ...category, reports: filteredReports };
+    })
+    .filter(c => !normalizedSearch || c.reports.length > 0);
 
   return (
     <div className="space-y-6 pb-12">

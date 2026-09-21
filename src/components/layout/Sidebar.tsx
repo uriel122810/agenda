@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CheckSquare, CalendarDays, Mail,
   Users, Settings, Building2, LogOut, ChevronRight,
-  Send
+  Send, Stamp
 } from 'lucide-react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,12 @@ const NAV_ITEMS = [
     label: 'Overview',
     href: '/overview',
     icon: LayoutDashboard,
+    roles: ['admin', 'employee'],
+  },
+  {
+    label: 'Foliador',
+    href: '/overview?tab=foliador',
+    icon: Stamp,
     roles: ['admin', 'employee'],
   },
   {

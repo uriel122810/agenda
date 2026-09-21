@@ -9,9 +9,10 @@ import {
   Users, Mail, ChevronRight, Settings, ChevronDown,
   Sun, Moon, Paperclip, Send, Loader2, X,
   ChevronLeft, Shield, Trash2, UserPlus, Globe, Lock,
-  Bell, FileText, Image as ImageIcon, UploadCloud
+  Bell, FileText, Image as ImageIcon, UploadCloud, Stamp
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import DocumentFoliator from '@/components/foliador/DocumentFoliator';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ChecklistStatus  = 'pendiente' | 'en_progreso' | 'completado';
@@ -150,7 +151,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
   const [isSettingsOpen, setIsSettingsOpen]   = useState(false);
   const [isDropdownOpen, setIsDropdownOpen]   = useState(false);
   const [isNotebookOpen, setIsNotebookOpen]   = useState(false);
-  const [currentView, setCurrentView]         = useState('pipelines');
+  const [currentView, setCurrentView]         = useState('foliador');
   const [notificationCount, setNotificationCount] = useState(0);
 
   // ── Modals
@@ -1128,6 +1129,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
 
   // ─── Navigation ─────────────────────────────────────────────
   const NAV = [
+    { id: 'foliador',    label: 'Foliador',   icon: Stamp           },
     { id: 'pipelines',   label: 'Pipelines',  icon: CheckCircle2    },
     { id: 'contactos',   label: 'Contactos',  icon: Users           },
     { id: 'actividades', label: 'Actividades',icon: CalendarDays    },
@@ -1264,6 +1266,15 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
 
         {/* ── Dynamic Content ─────────────────────────────────────────── */}
         <main className="flex-1 overflow-y-auto p-6 lg:p-8 relative">
+
+          {/* ══════════════ FOLIADOR ══════════════ */}
+          {currentView === 'foliador' && (
+            <DocumentFoliator
+              userEmail={userEmail}
+              userName={userName}
+              isDark={isDark}
+            />
+          )}
 
           {/* ══════════════ PIPELINES ══════════════ */}
           {currentView === 'pipelines' && (

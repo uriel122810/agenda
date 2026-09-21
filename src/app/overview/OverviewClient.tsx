@@ -1434,7 +1434,7 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
                               <Tooltip 
                                 contentStyle={{ backgroundColor: isDark ? '#1e293b' : '#ffffff', borderColor: isDark ? '#334155' : '#e2e8f0', borderRadius: '8px' }}
                                 labelStyle={{ color: '#b39656', fontWeight: 'bold' }}
-                                formatter={(val: number) => new Date(val).toLocaleDateString()}
+                                formatter={(val: any) => (val ? new Date(Number(val)).toLocaleDateString() : '')}
                               />
                               <Bar dataKey="old" fill="#94a3b8" radius={[4, 4, 0, 0]} name="Anterior" />
                               <Bar dataKey="new" fill="#6b1c35" radius={[4, 4, 0, 0]} name="Nueva" />

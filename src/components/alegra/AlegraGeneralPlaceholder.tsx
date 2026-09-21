@@ -1,22 +1,23 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, Package, Landmark, Calculator,
   Settings, Users, Plus, Download, Filter, Search, FileText,
   TrendingUp, CheckCircle, Clock, X, AlertCircle, ShieldCheck,
-  CheckCircle2, DollarSign, Building2, CreditCard, Hash
+  CheckCircle2, DollarSign, Building2, CreditCard, Hash,
+  Trash2, RefreshCw, RefreshCcw, Check
 } from 'lucide-react';
 import { AlegraTabId } from './AlegraSidebar';
 import {
   ContactoRecord, InventarioRecord, CuentaBancariaRecord,
   PolizaRecord, GastoRecord, IngresoRecord,
-  fetchContactos, saveContacto,
-  fetchInventario, saveInventarioItem,
-  fetchBancos, saveCuentaBancaria,
-  fetchPolizas, savePoliza,
-  fetchGastos, saveGasto,
-  fetchIngresos, saveIngreso
+  fetchContactos, saveContacto, deleteContacto,
+  fetchInventario, saveInventarioItem, deleteInventarioItem,
+  fetchBancos, saveCuentaBancaria, deleteCuentaBancaria,
+  fetchPolizas, savePoliza, deletePoliza,
+  fetchGastos, saveGasto, updateGastoEstado, deleteGasto,
+  fetchIngresos, saveIngreso, updateIngresoEstado, deleteIngreso
 } from '@/lib/crudService';
 import { generateOfficialReportPdf } from '@/lib/pdfReportGenerator';
 import { logAuditOperation } from '@/lib/auditService';
@@ -63,37 +64,147 @@ export default function AlegraGeneralPlaceholder({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Carga inicial de datos desde Supabase / Local
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [c, inv, b, p, g, ing] = await Promise.all([
-          fetchContactos(),
-          fetchInventario(),
-          fetchBancos(),
-          fetchPolizas(),
-          fetchGastos(),
-          fetchIngresos()
-        ]);
-        if (isMounted) {
-          setContactos(c);
-          setInventario(inv);
-          setBancos(b);
-          setPolizas(p);
-          setGastos(g);
-          setIngresos(ing);
-        }
-      } catch (err) {
-        console.error('Error loading crud data:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+  // Carga inicial y reactiva de datos desde Supabase con useEffect
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [c, inv, b, p, g, ing] = await Promise.all([
+        fetchContactos(),
+        fetchInventario(),
+        fetchBancos(),
+        fetchPolizas(),
+        fetchGastos(),
+        fetchIngresos()
+      ]);
+      setContactos(c);
+      setInventario(inv);
+      setBancos(b);
+      setPolizas(p);
+      setGastos(g);
+      setIngresos(ing);
+    } catch (err) {
+      console.error('Error cargando datos de Supabase:', err);
+    } finally {
+      setLoading(false);
     }
-    loadData();
-    return () => { isMounted = false; };
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData, tab]);
+
+  // ── Manejadores de Eliminación y Actualización con Supabase y Auditoría ──
+  const handleDeleteContacto = async (c: ContactoRecord) => {
+    if (!confirm(`¿Eliminar contacto "${c.nombre}" de la base de datos?`)) return;
+    await deleteContacto(c.id);
+    setContactos(prev => prev.filter(item => item.id !== c.id));
+    showToast(`Contacto ${c.nombre} eliminado.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Contactos',
+      accion: `Se eliminó contacto ${c.nombre} (${c.rfc})`,
+      detalles: `Tipo: ${c.tipo} • Saldo: ${c.saldo}`,
+      status: 'advertencia'
+    });
+  };
+
+  const handleDeleteInventario = async (item: InventarioRecord) => {
+    if (!confirm(`¿Eliminar ítem "${item.nombre}" (${item.codigo}) del inventario?`)) return;
+    await deleteInventarioItem(item.id);
+    setInventario(prev => prev.filter(i => i.id !== item.id));
+    showToast(`Ítem ${item.codigo} eliminado de Supabase.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Inventario',
+      accion: `Se eliminó ítem ${item.codigo} - ${item.nombre}`,
+      detalles: `Clave SAT: ${item.clave_sat} • Precio: ${item.precio}`,
+      status: 'advertencia'
+    });
+  };
+
+  const handleDeleteBanco = async (b: CuentaBancariaRecord) => {
+    if (!confirm(`¿Desvincular cuenta bancaria "${b.banco}"?`)) return;
+    await deleteCuentaBancaria(b.id);
+    setBancos(prev => prev.filter(item => item.id !== b.id));
+    showToast(`Cuenta de ${b.banco} desvinculada.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Bancos',
+      accion: `Se desvinculó cuenta bancaria ${b.banco}`,
+      detalles: `Cuenta: ${b.numero_cuenta} • Saldo: ${b.saldo_libros}`,
+      status: 'advertencia'
+    });
+  };
+
+  const handleDeletePoliza = async (p: PolizaRecord) => {
+    if (!confirm(`¿Eliminar póliza contable ${p.numero_poliza}?`)) return;
+    await deletePoliza(p.id);
+    setPolizas(prev => prev.filter(item => item.id !== p.id));
+    showToast(`Póliza ${p.numero_poliza} eliminada.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Contabilidad',
+      accion: `Se eliminó póliza contable ${p.numero_poliza} (${p.tipo})`,
+      detalles: `Concepto: ${p.concepto} • Monto: ${p.total_debe}`,
+      status: 'advertencia'
+    });
+  };
+
+  const handleDeleteGasto = async (g: GastoRecord) => {
+    if (!confirm(`¿Eliminar comprobante de gasto ${g.folio}?`)) return;
+    await deleteGasto(g.id);
+    setGastos(prev => prev.filter(item => item.id !== g.id));
+    showToast(`Gasto ${g.folio} eliminado.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Gastos',
+      accion: `Se eliminó registro de gasto ${g.folio}`,
+      detalles: `Proveedor: ${g.proveedor} • Total: ${g.total}`,
+      status: 'advertencia'
+    });
+  };
+
+  const handleToggleGastoEstado = async (g: GastoRecord) => {
+    const nuevoEstado = g.estado === 'Pagado' ? 'Por pagar' : 'Pagado';
+    await updateGastoEstado(g.id, nuevoEstado);
+    setGastos(prev => prev.map(item => item.id === g.id ? { ...item, estado: nuevoEstado } : item));
+    showToast(`Gasto ${g.folio} actualizado a ${nuevoEstado}.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Gastos',
+      accion: `Se actualizó estado de gasto ${g.folio} a ${nuevoEstado}`,
+      detalles: `Proveedor: ${g.proveedor} • Total: ${g.total}`,
+      status: 'completado'
+    });
+  };
+
+  const handleDeleteIngreso = async (i: IngresoRecord) => {
+    if (!confirm(`¿Eliminar factura / ingreso ${i.folio}?`)) return;
+    await deleteIngreso(i.id);
+    setIngresos(prev => prev.filter(item => item.id !== i.id));
+    showToast(`Ingreso ${i.folio} eliminado.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Ingresos',
+      accion: `Se eliminó registro de ingreso ${i.folio}`,
+      detalles: `Cliente: ${i.cliente} • Total: ${i.total}`,
+      status: 'advertencia'
+    });
+  };
+
+  const handleToggleIngresoEstado = async (i: IngresoRecord) => {
+    const nuevoEstado = i.estado === 'Cobrada' ? 'Pendiente' : 'Cobrada';
+    await updateIngresoEstado(i.id, nuevoEstado);
+    setIngresos(prev => prev.map(item => item.id === i.id ? { ...item, estado: nuevoEstado } : item));
+    showToast(`Factura ${i.folio} actualizada a ${nuevoEstado}.`);
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Ingresos',
+      accion: `Se actualizó estado de factura ${i.folio} a ${nuevoEstado}`,
+      detalles: `Cliente: ${i.cliente} • Total: ${i.total}`,
+      status: 'completado'
+    });
+  };
 
   // Manejo del botón primario según la pestaña
   const handlePrimaryAction = () => {
@@ -368,6 +479,15 @@ export default function AlegraGeneralPlaceholder({
 
   // ── Configuraciones dinámicas de la vista activa ──────────────────────────
 
+  interface ViewRow {
+    id: string;
+    cells: string[];
+    statusBadgeIndex?: number;
+    onDelete?: () => void;
+    onToggleStatus?: () => void;
+    toggleStatusLabel?: string;
+  }
+
   const viewData = useMemo(() => {
     switch (tab) {
       case 'ingresos': {
@@ -388,8 +508,15 @@ export default function AlegraGeneralPlaceholder({
             { label: 'Documentos emitidos', value: `${ingresos.length} comprobantes`, color: 'text-blue-700' },
             { label: 'Cobrado efectivamente', value: `$${(totalFacturado * 0.85).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`, color: 'text-emerald-700' }
           ],
-          tableHeaders: ['Folio / UUID', 'Cliente / Dependencia', 'Fecha emisión', 'Subtotal', 'IVA 16%', 'Total', 'Estado'],
-          rows: filtered.map(i => [i.folio, i.cliente, i.fecha, i.subtotal, i.iva, i.total, i.estado])
+          tableHeaders: ['Folio / UUID', 'Cliente / Dependencia', 'Fecha emisión', 'Subtotal', 'IVA 16%', 'Total', 'Estado', 'Acciones'],
+          rows: filtered.map(i => ({
+            id: i.id,
+            cells: [i.folio, i.cliente, i.fecha, i.subtotal, i.iva, i.total, i.estado],
+            statusBadgeIndex: 6,
+            onDelete: () => handleDeleteIngreso(i),
+            onToggleStatus: () => handleToggleIngresoEstado(i),
+            toggleStatusLabel: i.estado === 'Cobrada' ? 'Marcar Pendiente' : 'Marcar Cobrada'
+          }))
         };
       }
       case 'gastos': {
@@ -411,8 +538,15 @@ export default function AlegraGeneralPlaceholder({
             { label: 'IVA acreditable (16%)', value: `$${(totalGastos * 0.16).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`, color: 'text-indigo-700' },
             { label: 'Registros de egreso', value: `${gastos.length} comprobantes`, color: 'text-rose-700' }
           ],
-          tableHeaders: ['Folio Proveedor', 'Proveedor / Emisor', 'Categoría presupuestal', 'Fecha', 'Total', 'Estado'],
-          rows: filtered.map(g => [g.folio, g.proveedor, g.categoria, g.fecha, g.total, g.estado])
+          tableHeaders: ['Folio Proveedor', 'Proveedor / Emisor', 'Categoría presupuestal', 'Fecha', 'Total', 'Estado', 'Acciones'],
+          rows: filtered.map(g => ({
+            id: g.id,
+            cells: [g.folio, g.proveedor, g.categoria, g.fecha, g.total, g.estado],
+            statusBadgeIndex: 5,
+            onDelete: () => handleDeleteGasto(g),
+            onToggleStatus: () => handleToggleGastoEstado(g),
+            toggleStatusLabel: g.estado === 'Pagado' ? 'Marcar Por pagar' : 'Marcar Pagado'
+          }))
         };
       }
       case 'contactos': {
@@ -435,8 +569,12 @@ export default function AlegraGeneralPlaceholder({
             { label: 'Total Proveedores', value: `${provCount} registrados`, color: 'text-blue-700' },
             { label: 'Total Padrón', value: `${contactos.length} activos`, color: 'text-purple-700' }
           ],
-          tableHeaders: ['Nombre / Razón Social', 'RFC', 'Tipo', 'Teléfono', 'Correo', 'Saldo en Cuenta'],
-          rows: filtered.map(c => [c.nombre, c.rfc, c.tipo, c.telefono, c.email, c.saldo])
+          tableHeaders: ['Nombre / Razón Social', 'RFC', 'Tipo', 'Teléfono', 'Correo', 'Saldo en Cuenta', 'Acciones'],
+          rows: filtered.map(c => ({
+            id: c.id,
+            cells: [c.nombre, c.rfc, c.tipo, c.telefono, c.email, c.saldo],
+            onDelete: () => handleDeleteContacto(c)
+          }))
         };
       }
       case 'inventario': {
@@ -456,8 +594,12 @@ export default function AlegraGeneralPlaceholder({
             { label: 'Valor de inventario', value: '$318,400.00 MXN', color: 'text-[#581c2f]' },
             { label: 'Bajo en stock', value: '0 ítems', color: 'text-amber-600' }
           ],
-          tableHeaders: ['Código', 'Nombre del ítem', 'Clave SAT', 'Precio Estimado', 'Costo Promedio', 'Existencia'],
-          rows: filtered.map(i => [i.codigo, i.nombre, i.clave_sat, i.precio, i.costo, i.existencia])
+          tableHeaders: ['Código', 'Nombre del ítem', 'Clave SAT', 'Precio Estimado', 'Costo Promedio', 'Existencia', 'Acciones'],
+          rows: filtered.map(i => ({
+            id: i.id,
+            cells: [i.codigo, i.nombre, i.clave_sat, i.precio, i.costo, i.existencia],
+            onDelete: () => handleDeleteInventario(i)
+          }))
         };
       }
       case 'bancos': {
@@ -478,8 +620,13 @@ export default function AlegraGeneralPlaceholder({
             { label: 'Cuentas activas', value: `${bancos.length} cuentas`, color: 'text-blue-700' },
             { label: 'Estatus conciliación', value: '100% Conciliado', color: 'text-emerald-700' }
           ],
-          tableHeaders: ['Institución Bancaria', 'Número de Cuenta / CLABE', 'Moneda', 'Saldo en Libros', 'Saldo en Banco', 'Estatus'],
-          rows: filtered.map(b => [b.banco, b.numero_cuenta, b.moneda, b.saldo_libros, b.saldo_banco, b.estatus])
+          tableHeaders: ['Institución Bancaria', 'Número de Cuenta / CLABE', 'Moneda', 'Saldo en Libros', 'Saldo en Banco', 'Estatus', 'Acciones'],
+          rows: filtered.map(b => ({
+            id: b.id,
+            cells: [b.banco, b.numero_cuenta, b.moneda, b.saldo_libros, b.saldo_banco, b.estatus],
+            statusBadgeIndex: 5,
+            onDelete: () => handleDeleteBanco(b)
+          }))
         };
       }
       case 'contabilidad': {
@@ -500,8 +647,13 @@ export default function AlegraGeneralPlaceholder({
             { label: 'Suma de Debe (Cargos)', value: `$${sumaDebe.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`, color: 'text-[#581c2f]' },
             { label: 'Suma de Haber (Abonos)', value: `$${sumaDebe.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`, color: 'text-[#581c2f]' }
           ],
-          tableHeaders: ['Número Póliza', 'Tipo', 'Fecha', 'Concepto', 'Total Cargos', 'Total Abonos', 'Cuadre'],
-          rows: filtered.map(p => [p.numero_poliza, p.tipo, p.fecha, p.concepto, p.total_debe, p.total_haber, p.cuadre])
+          tableHeaders: ['Número Póliza', 'Tipo', 'Fecha', 'Concepto', 'Total Cargos', 'Total Abonos', 'Cuadre', 'Acciones'],
+          rows: filtered.map(p => ({
+            id: p.id,
+            cells: [p.numero_poliza, p.tipo, p.fecha, p.concepto, p.total_debe, p.total_haber, p.cuadre],
+            statusBadgeIndex: 6,
+            onDelete: () => handleDeletePoliza(p)
+          }))
         };
       }
       case 'configuracion':
@@ -518,9 +670,9 @@ export default function AlegraGeneralPlaceholder({
           ],
           tableHeaders: ['Parámetro', 'Valor actual', 'Última modificación', 'Responsable', 'Acción'],
           rows: [
-            ['Certificado de Sello Digital (CSD)', 'Cargado y validado (.cer, .key)', '10 Sep 2026', 'Uriel Gómez', 'Actualizar'],
-            ['Folios de Documentos', 'Serie OFI (consecutivo digital)', '01 Ene 2026', 'Sistema', 'Modificar'],
-            ['Conexión Buzón SAT', 'Sincronización diaria habilitada', 'Ayer', 'Automatización', 'Probar']
+            { id: 'cfg-1', cells: ['Certificado de Sello Digital (CSD)', 'Cargado y validado (.cer, .key)', '10 Sep 2026', 'Uriel Gómez', 'Actualizar'] },
+            { id: 'cfg-2', cells: ['Folios de Documentos', 'Serie OFI (consecutivo digital)', '01 Ene 2026', 'Sistema', 'Modificar'] },
+            { id: 'cfg-3', cells: ['Conexión Buzón SAT', 'Sincronización diaria habilitada', 'Ayer', 'Automatización', 'Probar'] }
           ]
         };
       }
@@ -622,6 +774,17 @@ export default function AlegraGeneralPlaceholder({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={loadData}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+              title="Sincronizar y recargar registros desde Supabase"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>{loading ? 'Sincronizando...' : 'Sincronizar'}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleExportView}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               title="Descargar reporte en PDF oficial"
@@ -638,7 +801,7 @@ export default function AlegraGeneralPlaceholder({
             <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
               <tr>
                 {viewData.tableHeaders.map((header, idx) => (
-                  <th key={idx} className="px-5 py-3.5">
+                  <th key={idx} className={`px-5 py-3.5 ${idx === viewData.tableHeaders.length - 1 ? 'text-right' : ''}`}>
                     {header}
                   </th>
                 ))}
@@ -652,21 +815,21 @@ export default function AlegraGeneralPlaceholder({
                   </td>
                 </tr>
               ) : (
-                viewData.rows.map((row, rowIdx) => (
-                  <tr key={rowIdx} className="hover:bg-[#FDFBF9] transition">
-                    {row.map((cell, cellIdx) => (
+                viewData.rows.map((row: ViewRow, rowIdx) => (
+                  <tr key={row.id || rowIdx} className="hover:bg-[#FDFBF9] transition">
+                    {row.cells.map((cell, cellIdx) => (
                       <td key={cellIdx} className="px-5 py-4 font-medium text-slate-700">
-                        {cellIdx === row.length - 1 && (cell === 'Cobrada' || cell === 'Pagado' || cell === 'Conciliado' || cell === 'Cuadrada') ? (
+                        {row.statusBadgeIndex === cellIdx && (cell === 'Cobrada' || cell === 'Pagado' || cell === 'Conciliado' || cell === 'Cuadrada') ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                             <CheckCircle className="h-3 w-3" />
                             <span>{cell}</span>
                           </span>
-                        ) : cellIdx === row.length - 1 && (cell === 'Pendiente' || cell === 'Por pagar') ? (
+                        ) : row.statusBadgeIndex === cellIdx && (cell === 'Pendiente' || cell === 'Por pagar') ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
                             <Clock className="h-3 w-3" />
                             <span>{cell}</span>
                           </span>
-                        ) : cellIdx === row.length - 1 && cell === 'Actualizar' ? (
+                        ) : cell === 'Actualizar' ? (
                           <button
                             onClick={onOpenCSDModal}
                             className="text-[#581c2f] hover:underline font-bold"
@@ -678,6 +841,32 @@ export default function AlegraGeneralPlaceholder({
                         )}
                       </td>
                     ))}
+                    {(row.onDelete || row.onToggleStatus) && (
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {row.onToggleStatus && (
+                            <button
+                              type="button"
+                              onClick={row.onToggleStatus}
+                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                              title={row.toggleStatusLabel || 'Cambiar estatus'}
+                            >
+                              {row.toggleStatusLabel || 'Estado'}
+                            </button>
+                          )}
+                          {row.onDelete && (
+                            <button
+                              type="button"
+                              onClick={row.onDelete}
+                              className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition"
+                              title="Eliminar registro de Supabase"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

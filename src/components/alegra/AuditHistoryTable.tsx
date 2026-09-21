@@ -379,6 +379,7 @@ export default function AuditHistoryTable({ searchQuery: externalSearchQuery = '
                 <option value="Bancos">Bancos</option>
                 <option value="Contactos">Contactos</option>
                 <option value="Inventario">Inventario</option>
+                <option value="Colaboradores">Colaboradores</option>
                 <option value="Usuarios">Usuarios</option>
               </select>
             </div>

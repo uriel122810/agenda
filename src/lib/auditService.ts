@@ -11,7 +11,7 @@ import { AuditLog } from './auditSeedData';
 export interface LogAuditParams {
   usuario?: string;
   email?: string;
-  modulo: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Contabilidad' | 'Bancos' | 'Contactos' | 'Inventario' | 'Usuarios' | 'Gastos' | 'Ingresos';
+  modulo: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Contabilidad' | 'Bancos' | 'Contactos' | 'Inventario' | 'Usuarios' | 'Gastos' | 'Ingresos' | 'Colaboradores';
   accion: string;
   detalles?: string;
   ip?: string;

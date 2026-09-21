@@ -1,106 +1,109 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, UserPlus, Mail, Shield, CheckCircle2, Clock,
-  MoreHorizontal, Trash2, Send, X, ShieldAlert, UserCheck
+  MoreHorizontal, Trash2, Send, X, ShieldAlert, UserCheck, RefreshCw
 } from 'lucide-react';
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  role: 'Administrador' | 'Contador Senior' | 'Auxiliar Contable' | 'Auditor';
-  status: 'Aceptada' | 'Pendiente' | 'Expirada';
-  invitationsCount: number;
-  assignedClientsCount: number;
-  joinedDate: string;
-}
+import {
+  ColaboradorRecord,
+  fetchColaboradores,
+  saveColaborador,
+  deleteColaborador,
+  updateColaboradorInvitacion
+} from '@/lib/crudService';
+import { logAuditOperation } from '@/lib/auditService';
 
 export default function AlegraTeamManager() {
-  const [members, setMembers] = useState<TeamMember[]>([
-    {
-      id: 'usr-1',
-      name: 'Uriel Gómez (Tú)',
-      email: 'uriel@pazsuma.com',
-      role: 'Administrador',
-      status: 'Aceptada',
-      invitationsCount: 1,
-      assignedClientsCount: 40,
-      joinedDate: '01 Ene 2026'
-    },
-    {
-      id: 'usr-2',
-      name: 'Ana Martínez',
-      email: 'ana.martinez@pazsuma.com',
-      role: 'Contador Senior',
-      status: 'Aceptada',
-      invitationsCount: 1,
-      assignedClientsCount: 25,
-      joinedDate: '15 Feb 2026'
-    },
-    {
-      id: 'usr-3',
-      name: 'Carlos Ruiz Solís',
-      email: 'carlos.ruiz@pazsuma.com',
-      role: 'Auxiliar Contable',
-      status: 'Aceptada',
-      invitationsCount: 2,
-      assignedClientsCount: 15,
-      joinedDate: '10 Mar 2026'
-    },
-    {
-      id: 'usr-4',
-      name: 'Mariana Vega',
-      email: 'mariana.vega@consultores.mx',
-      role: 'Auditor',
-      status: 'Pendiente',
-      invitationsCount: 1,
-      assignedClientsCount: 0,
-      joinedDate: 'Invitado ayer'
-    }
-  ]);
+  const [members, setMembers] = useState<ColaboradorRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState<TeamMember['role']>('Auxiliar Contable');
+  const [inviteRole, setInviteRole] = useState<ColaboradorRecord['role']>('Auxiliar Contable');
 
-  const handleSendInvite = (e: React.FormEvent) => {
+  // Carga inicial reactiva desde Supabase
+  const loadMembers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchColaboradores();
+      setMembers(data);
+    } catch (err) {
+      console.error('Error cargando colaboradores de Supabase:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
+
+  const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
 
-    const newMember: TeamMember = {
-      id: `usr-${Date.now()}`,
+    const newMemberData = {
       name: inviteName.trim() || inviteEmail.split('@')[0],
       email: inviteEmail.trim(),
       role: inviteRole,
-      status: 'Aceptada',
+      status: 'Aceptada' as const,
       invitationsCount: 1,
       assignedClientsCount: 0,
       joinedDate: 'Hoy'
     };
 
-    setMembers(prev => [...prev, newMember]);
+    const created = await saveColaborador(newMemberData);
+    setMembers(prev => [created, ...prev.filter(m => m.id !== created.id)]);
     setIsInviteModalOpen(false);
     setInviteEmail('');
     setInviteName('');
+
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Colaboradores',
+      accion: `Se registró colaborador ${created.name} (${created.role})`,
+      detalles: `Email: ${created.email} • Estatus: ${created.status}`,
+      status: 'completado'
+    });
   };
 
-  const handleResendInvite = (memberId: string) => {
+  const handleResendInvite = async (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return;
+    const newCount = member.invitationsCount + 1;
+    await updateColaboradorInvitacion(memberId, newCount);
     setMembers(prev =>
       prev.map(m =>
         m.id === memberId
-          ? { ...m, invitationsCount: m.invitationsCount + 1 }
+          ? { ...m, invitationsCount: newCount }
           : m
       )
     );
-    alert('Invitación reenviada con éxito por correo electrónico.');
+    await logAuditOperation({
+      usuario: 'Uriel Gómez',
+      modulo: 'Colaboradores',
+      accion: `Se reenvió invitación a ${member.email}`,
+      detalles: `Total invitaciones: ${newCount}`,
+      status: 'completado'
+    });
+    alert('Invitación reenviada con éxito y registrada en el sistema.');
   };
 
-  const handleRemoveMember = (memberId: string) => {
-    if (confirm('¿Estás seguro de revocar el acceso a este colaborador?')) {
+  const handleRemoveMember = async (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return;
+    if (confirm(`¿Estás seguro de revocar el acceso al colaborador ${member.name}?`)) {
+      await deleteColaborador(memberId);
       setMembers(prev => prev.filter(m => m.id !== memberId));
+      await logAuditOperation({
+        usuario: 'Uriel Gómez',
+        modulo: 'Colaboradores',
+        accion: `Se revocó acceso al colaborador ${member.name}`,
+        detalles: `Email: ${member.email} • Rol: ${member.role}`,
+        status: 'advertencia'
+      });
     }
   };
 
@@ -117,14 +120,27 @@ export default function AlegraTeamManager() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsInviteModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#581c2f] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs transition hover:bg-[#72223c] active:scale-[0.98]"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>+ Agregar colaborador</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadMembers}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50"
+            title="Sincronizar y recargar desde Supabase"
+          >
+            <RefreshCw className={`h-4 w-4 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Sincronizando...' : 'Sincronizar'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsInviteModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#581c2f] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs transition hover:bg-[#72223c] active:scale-[0.98]"
+          >
+            <UserPlus className="h-4 w-4" />
+            <span>+ Agregar colaborador</span>
+          </button>
+        </div>
       </div>
 
       {/* Tarjetas resumen */}

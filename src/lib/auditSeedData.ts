@@ -11,7 +11,7 @@ export interface AuditLog {
   email: string;
   date: string;
   relativeTime: string;
-  module: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Contabilidad' | 'Bancos' | 'Contactos' | 'Inventario' | 'Usuarios' | 'Gastos' | 'Ingresos';
+  module: 'Foliador' | 'Buzón SAT' | 'Expedientes RFC' | 'Tareas' | 'Sellos CSD' | 'Contabilidad' | 'Bancos' | 'Contactos' | 'Inventario' | 'Usuarios' | 'Gastos' | 'Ingresos' | 'Colaboradores';
   action: string;
   details?: string;
   ip: string;

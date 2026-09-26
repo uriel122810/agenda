@@ -1,4 +1,5 @@
 import { PDFDocument, rgb, degrees, StandardFonts, PDFPage } from 'pdf-lib';
+import { drawOfficialStampOnPdf, formatOfficialStampDate as formatOfficialStampDateFromStamp } from './OfficialStamp';
 
 export type FontChoice = 'Helvetica' | 'TimesRoman' | 'Courier';
 
@@ -28,16 +29,21 @@ export interface FolioConfig {
 
 export interface OperadoStampConfig {
   enabled: boolean;
-  institutionText: string;
+  institutionText?: string;
+  institutionLine1?: string;
+  institutionLine2?: string;
+  institutionLine3?: string;
   operadoWord: string;
-  subText: string;
+  subText?: string;
+  shieldImageUrl?: string | null;
+  shieldBytes?: ArrayBuffer | null;
   stampDateIso: string; // YYYY-MM-DD
-  colorHex: string; // Box and institution text color (burgundy, gold, blue, dark)
-  dateColorHex: string; // MUST BE RED (#dc2626)
-  opacity: number; // 10 to 100
+  colorHex: string; // Official blue ink: #003399
+  dateColorHex: string; // Official red ink: #E62B4A
+  opacity: number; // 10 to 100 (default: 88, simulating real rubber stamp ink)
   isUnderlay: boolean; // Background layer / watermark mode (low opacity, non-blocking)
-  width: number; // in points
-  height: number; // in points
+  width: number; // in points (default: 210)
+  height: number; // in points (default: 105)
   // Placement
   positionMatrix: 'tl' | 'tc' | 'tr' | 'ml' | 'mc' | 'mr' | 'bl' | 'bc' | 'br' | 'free';
   normX: number;
@@ -77,20 +83,10 @@ export interface DocumentStampSettings {
 }
 
 /**
- * Format date in official Mexican stamp format (e.g. "24 SEP. 2026")
+ * Format date in official Mexican stamp format (e.g. "30 JUL. 2026")
  */
 export function formatOfficialStampDate(isoDateStr: string): string {
-  if (!isoDateStr) return '';
-  const parts = isoDateStr.split('-');
-  if (parts.length === 3) {
-    const year = parts[0];
-    const monthIndex = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    const months = ['ENE.', 'FEB.', 'MAR.', 'ABR.', 'MAY.', 'JUN.', 'JUL.', 'AGO.', 'SEP.', 'OCT.', 'NOV.', 'DIC.'];
-    const monthStr = months[monthIndex] || 'ENE.';
-    return `${String(day).padStart(2, '0')} ${monthStr} ${year}`;
-  }
-  return isoDateStr;
+  return formatOfficialStampDateFromStamp(isoDateStr);
 }
 
 /**
@@ -287,10 +283,10 @@ export async function stampSinglePdf(
       ? initialGlobalPageIndex + pageCounter
       : docIndex;
 
-    // ── 1. ESTAMPAR SELLO OFICIAL "OPERADO" ──────────────────────────────────
+    // ── 1. ESTAMPAR SELLO OFICIAL DE TRES NIVELES ("OPERADO") ─────────────
     if (settings.operado.enabled) {
-      const stampW = settings.operado.width || 190;
-      const stampH = settings.operado.height || 85;
+      const stampW = settings.operado.width || 210;
+      const stampH = settings.operado.height || 105;
       const { x: stampX, y: stampY } = calculatePdfPlacement(
         settings.operado.normX,
         settings.operado.normY,
@@ -302,116 +298,24 @@ export async function stampSinglePdf(
         settings.operado.offsetY
       );
 
-      // Fondo del sello (semi-transparente para jamás bloquear texto original)
-      page.drawRectangle({
+      // Extraer bytes de escudo personalizado si existen
+      const shieldBytes: ArrayBuffer | null = settings.operado.shieldBytes || null;
+
+      await drawOfficialStampOnPdf(page, pdfDoc, {
         x: stampX,
         y: stampY,
         width: stampW,
         height: stampH,
-        color: rgb(0.98, 0.98, 0.99),
-        opacity: operadoAlpha * 0.45,
-        borderWidth: 2,
-        borderColor: operadoBorderColor,
-        borderOpacity: operadoAlpha
-      });
-
-      // Recuadro interior punteado / doble recuadro oficial
-      const innerInset = 3.5;
-      page.drawRectangle({
-        x: stampX + innerInset,
-        y: stampY + innerInset,
-        width: stampW - innerInset * 2,
-        height: stampH - innerInset * 2,
-        borderWidth: 0.8,
-        borderColor: operadoBorderColor,
-        borderOpacity: operadoAlpha * 0.8
-      });
-
-      // Encabezado institucional superior del sello
-      const instText = (settings.operado.institutionText || 'PAZSUMA • GESTIÓN PÚBLICA').toUpperCase();
-      const instFontSize = 7;
-      const instTextW = helveticaBold.widthOfTextAtSize(instText, instFontSize);
-      page.drawText(instText, {
-        x: stampX + (stampW - instTextW) / 2,
-        y: stampY + stampH - 14,
-        size: instFontSize,
-        font: helveticaBold,
-        color: operadoBorderColor,
-        opacity: operadoAlpha
-      });
-
-      // Línea divisoria superior fina
-      page.drawLine({
-        start: { x: stampX + 8, y: stampY + stampH - 18 },
-        end: { x: stampX + stampW - 8, y: stampY + stampH - 18 },
-        thickness: 0.6,
-        color: operadoBorderColor,
-        opacity: operadoAlpha * 0.5
-      });
-
-      // Gran palabra "OPERADO"
-      const operadoWord = (settings.operado.operadoWord || 'OPERADO').toUpperCase();
-      const operadoFontSize = 17;
-      const operadoWordW = helveticaBold.widthOfTextAtSize(operadoWord, operadoFontSize);
-      page.drawText(operadoWord, {
-        x: stampX + (stampW - operadoWordW) / 2,
-        y: stampY + stampH - 38,
-        size: operadoFontSize,
-        font: helveticaBold,
-        color: operadoBorderColor,
-        opacity: operadoAlpha
-      });
-
-      // Línea divisoria central
-      page.drawLine({
-        start: { x: stampX + 8, y: stampY + stampH - 43 },
-        end: { x: stampX + stampW - 8, y: stampY + stampH - 43 },
-        thickness: 0.6,
-        color: operadoBorderColor,
-        opacity: operadoAlpha * 0.5
-      });
-
-      // CAJA DE FECHA CON TINTA ROJA OFICIAL (Imitando el clásico fechador institucional)
-      const officialDateStr = formatOfficialStampDate(settings.operado.stampDateIso);
-      const dateFontSize = 10;
-      const dateTextW = courierBold.widthOfTextAtSize(officialDateStr, dateFontSize);
-
-      // Recuadro tenue para enmarcar la fecha
-      const dateBoxW = Math.max(dateTextW + 14, 110);
-      const dateBoxH = 14;
-      page.drawRectangle({
-        x: stampX + (stampW - dateBoxW) / 2,
-        y: stampY + 18,
-        width: dateBoxW,
-        height: dateBoxH,
-        color: rgb(1, 0.95, 0.95),
-        opacity: operadoAlpha * 0.5,
-        borderColor: operadoDateColor,
-        borderWidth: 0.5,
-        borderOpacity: operadoAlpha * 0.7
-      });
-
-      // FECHA RENDERIZADA EN COLOR ROJO VIBRANTE
-      page.drawText(officialDateStr, {
-        x: stampX + (stampW - dateTextW) / 2,
-        y: stampY + 22,
-        size: dateFontSize,
-        font: courierBold,
-        color: operadoDateColor,
-        opacity: Math.min(1.0, operadoAlpha * 1.25)
-      });
-
-      // Subtexto inferior (ej: FONDO FISCAL / EJERCICIO 2026)
-      const subText = (settings.operado.subText || 'COMPROBADO Y ARCHIVADO').toUpperCase();
-      const subFontSize = 6;
-      const subTextW = helveticaRegular.widthOfTextAtSize(subText, subFontSize);
-      page.drawText(subText, {
-        x: stampX + (stampW - subTextW) / 2,
-        y: stampY + 8,
-        size: subFontSize,
-        font: helveticaRegular,
-        color: operadoBorderColor,
-        opacity: operadoAlpha * 0.9
+        opacity: operadoAlpha,
+        inkBlue: settings.operado.colorHex || '#003399',
+        inkRed: settings.operado.dateColorHex || '#E62B4A',
+        date: settings.operado.stampDateIso,
+        operadoText: settings.operado.operadoWord || 'OPERADO',
+        institutionLine1: settings.operado.institutionLine1 || settings.operado.institutionText || 'H. AYUNTAMIENTO',
+        institutionLine2: settings.operado.institutionLine2 || 'DE LA PAZ',
+        institutionLine3: settings.operado.institutionLine3 || '2024 - 2027',
+        shieldImageUrl: settings.operado.shieldImageUrl || null,
+        shieldImageBytes: shieldBytes
       });
     }
 

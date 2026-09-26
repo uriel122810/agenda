@@ -117,25 +117,29 @@ export default function FolioVisualEditor({
     offsetY: 0
   });
 
-  // ── 2. CONFIGURACIÓN DEL SELLO OFICIAL "OPERADO" ─────────────────────────
+  // ── 2. CONFIGURACIÓN DEL SELLO OFICIAL "OPERADO" DE TRES NIVELES ─────────
   const [operadoConfig, setOperadoConfig] = useState<OperadoStampConfig>({
-    enabled: false,
-    institutionText: 'PAZSUMA • GESTIÓN PÚBLICA',
+    enabled: true,
     operadoWord: 'OPERADO',
-    subText: 'RECURSOS FISCALES 2026',
+    institutionLine1: 'H. AYUNTAMIENTO',
+    institutionLine2: 'DE LA PAZ',
+    institutionLine3: '2024 - 2027',
+    shieldImageUrl: null,
+    shieldBytes: null,
     stampDateIso: new Date().toISOString().slice(0, 10), // Fecha actual YYYY-MM-DD
-    colorHex: '#581c2f', // Color del recuadro e institución
-    dateColorHex: '#dc2626', // Rojo institucional para la fecha
-    opacity: 30, // Default suave para capa de fondo
-    isUnderlay: true, // Capa de Fondo (Bajo el texto / No bloqueante)
-    width: 190,
-    height: 85,
+    colorHex: '#003399', // Azul marino/tinta estilo sello físico
+    dateColorHex: '#E62B4A', // Rojo tinta claro/vivo estilo fechador manual
+    opacity: 88, // Efecto tinta físicamente realista (aprox. 85%-90%)
+    isUnderlay: false, // Capa semi-translúcida no bloqueante
+    width: 210,
+    height: 105,
     positionMatrix: 'mc',
     normX: 0.50,
     normY: 0.50,
     offsetX: 0,
     offsetY: 0
   });
+  const shieldInputRef = useRef<HTMLInputElement>(null);
 
   // ── 3. CONFIGURACIÓN DE IMAGEN / LOGOTIPO PNG ────────────────────────────
   const [logoConfig, setLogoConfig] = useState<LogoStampConfig>({
@@ -318,6 +322,30 @@ export default function FolioVisualEditor({
       fileBytes: null
     }));
     if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  // ── SUBIDA DE ESCUDO INSTITUCIONAL (PNG TRANSPARENTE) PARA SELLO OPERADO ──
+  const handleShieldUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const previewUrl = URL.createObjectURL(file);
+    const buffer = await file.arrayBuffer();
+    setOperadoConfig(prev => ({
+      ...prev,
+      shieldBytes: buffer,
+      shieldImageUrl: previewUrl
+    }));
+  };
+
+  const handleRemoveShield = () => {
+    if (operadoConfig.shieldImageUrl) URL.revokeObjectURL(operadoConfig.shieldImageUrl);
+    setOperadoConfig(prev => ({
+      ...prev,
+      shieldBytes: null,
+      shieldImageUrl: null
+    }));
+    if (shieldInputRef.current) shieldInputRef.current.value = '';
   };
 
   // ── PROCESAMIENTO GENERAL DE ESTAMPADO CON PERSISTENCIA ────────────────────
@@ -869,36 +897,81 @@ export default function FolioVisualEditor({
           )}
 
           {/* ═════════════════════════════════════════════════════════════════ */}
-          {/* PESTAÑA 2: SELLO OFICIAL "OPERADO" Y CAPA DE FONDO                */}
+          {/* PESTAÑA 2: SELLO OFICIAL DE TRES NIVELES (OPERADO)                */}
           {/* ═════════════════════════════════════════════════════════════════ */}
           {activeTab === 'operado' && (
             <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-2xs space-y-4 animate-in fade-in">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <Stamp className="h-4 w-4 text-red-600" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    Sello Oficial &quot;OPERADO&quot;
-                  </h3>
+                  <Stamp className="h-4 w-4 text-[#003399]" />
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Sello Oficial de 3 Niveles
+                    </h3>
+                    <p className="text-[10px] text-slate-400">Réplica exacta del sello municipal H. Ayuntamiento</p>
+                  </div>
                 </div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-xl cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-[#003399] bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl cursor-pointer">
                   <input
                     type="checkbox"
                     checked={operadoConfig.enabled}
                     onChange={e => setOperadoConfig({ ...operadoConfig, enabled: e.target.checked })}
-                    className="accent-red-600 h-4 w-4 rounded"
+                    className="accent-[#003399] h-4 w-4 rounded"
                   />
-                  <span>Activar Sello OPERADO</span>
+                  <span>Activar Sello</span>
                 </label>
               </div>
 
-              {/* Selector de Fecha Dinámico (Renderizado en ROJO) */}
+              {/* Input oculto para carga de PNG transparente del escudo/leyenda institucional */}
+              <input
+                ref={shieldInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={handleShieldUpload}
+                className="hidden"
+              />
+
+              {/* ── 1. PARTE SUPERIOR (Texto Azul: OPERADO) ── */}
+              <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-extrabold text-[#003399] uppercase flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-[#003399]" />
+                    <span>1. Parte Superior (Texto Azul)</span>
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-[#003399] bg-white px-2 py-0.5 rounded border border-blue-200">
+                    {operadoConfig.colorHex}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2">
+                    <input
+                      type="text"
+                      value={operadoConfig.operadoWord}
+                      onChange={e => setOperadoConfig({ ...operadoConfig, operadoWord: e.target.value.toUpperCase() })}
+                      placeholder="OPERADO"
+                      className="w-full rounded-lg border border-blue-200 bg-white p-2 text-xs font-black uppercase text-[#003399] tracking-widest focus:outline-none focus:ring-1 focus:ring-[#003399]"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="color"
+                      value={operadoConfig.colorHex}
+                      onChange={e => setOperadoConfig({ ...operadoConfig, colorHex: e.target.value })}
+                      className="w-full h-8 rounded-lg border border-blue-200 cursor-pointer p-0.5 bg-white"
+                      title="Color azul tinta estilo sello físico"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── 2. PARTE CENTRAL (Fecha Dinámica en Rojo: DD MMM. YYYY) ── */}
               <div className="rounded-xl border border-red-200 bg-red-50/50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-extrabold text-red-900 uppercase flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 text-red-600" />
-                    <span>Fecha Dinámica del Sello (Tinta Roja Oficial)</span>
+                    <Calendar className="h-3.5 w-3.5 text-[#E62B4A]" />
+                    <span>2. Parte Central (Fecha Dinámica en Rojo)</span>
                   </label>
-                  <span className="text-[10px] font-mono font-bold bg-white text-red-700 px-2 py-0.5 rounded border border-red-200">
+                  <span className="text-[10px] font-mono font-black bg-white text-[#E62B4A] px-2 py-0.5 rounded border border-red-200">
                     {formatOfficialStampDate(operadoConfig.stampDateIso)}
                   </span>
                 </div>
@@ -910,7 +983,7 @@ export default function FolioVisualEditor({
                     className="w-full rounded-lg border border-red-300 bg-white p-2 text-xs font-mono font-bold text-red-800 focus:outline-none focus:ring-1 focus:ring-red-500"
                   />
                   <div className="flex items-center gap-1">
-                    {['Hoy', 'Ayer', '30 JUL. 2026'].map(preset => (
+                    {['Hoy', 'Ayer', '30 JUL. 2026', '30 AGO. 2026'].map(preset => (
                       <button
                         key={preset}
                         type="button"
@@ -921,8 +994,10 @@ export default function FolioVisualEditor({
                             const d = new Date();
                             d.setDate(d.getDate() - 1);
                             setOperadoConfig({ ...operadoConfig, stampDateIso: d.toISOString().slice(0, 10) });
-                          } else {
+                          } else if (preset === '30 JUL. 2026') {
                             setOperadoConfig({ ...operadoConfig, stampDateIso: '2026-07-30' });
+                          } else {
+                            setOperadoConfig({ ...operadoConfig, stampDateIso: '2026-08-30' });
                           }
                         }}
                         className="px-2 py-1.5 rounded-lg bg-white border border-red-200 text-[10px] font-bold text-red-700 hover:bg-red-100 transition cursor-pointer"
@@ -934,76 +1009,151 @@ export default function FolioVisualEditor({
                 </div>
               </div>
 
-              {/* Capa de Fondo (Underlay) / Garantía de Legibilidad */}
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={operadoConfig.isUnderlay}
-                    onChange={e => setOperadoConfig({
-                      ...operadoConfig,
-                      isUnderlay: e.target.checked,
-                      opacity: e.target.checked ? 28 : operadoConfig.opacity
-                    })}
-                    className="accent-[#581c2f] h-4 w-4 rounded mt-0.5"
-                  />
-                  <div>
-                    <span className="block text-xs font-bold text-slate-800">
-                      Capa de Fondo (Bajo el texto / Marca de agua)
-                    </span>
-                    <span className="text-[10px] text-slate-500 leading-relaxed block mt-0.5">
-                      Garantiza que el sello se estampe con opacidad calibrada para que NUNCA cubra ni tape el texto ni la información del documento original.
-                    </span>
-                  </div>
-                </label>
+              {/* ── 3. PARTE INFERIOR (Logotipo Institucional en Azul) ── */}
+              <div className="rounded-xl border border-blue-200 bg-slate-50/70 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-extrabold text-[#003399] uppercase flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-[#003399]" />
+                    <span>3. Parte Inferior (Logotipo Institucional)</span>
+                  </label>
+                  <span className="text-[9px] font-bold text-slate-500">
+                    {operadoConfig.shieldImageUrl ? 'PNG Personalizado' : 'Escudo Vectorial La Paz'}
+                  </span>
+                </div>
 
-                {/* Slider de Opacidad */}
-                <div className="pt-2 border-t border-slate-200/80">
-                  <div className="flex justify-between text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    <span>Opacidad del Sello</span>
-                    <span className="text-[#581c2f] font-mono">{operadoConfig.opacity}%</span>
+                {/* Subida o selección de escudo */}
+                <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200">
+                  <div className="h-8 w-8 rounded bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 overflow-hidden">
+                    {operadoConfig.shieldImageUrl ? (
+                      <img src={operadoConfig.shieldImageUrl} alt="Escudo" className="h-full w-full object-contain" />
+                    ) : (
+                      <ShieldCheck className="h-5 w-5 text-[#003399]" />
+                    )}
                   </div>
-                  <input
-                    type="range"
-                    min={15}
-                    max={100}
-                    value={operadoConfig.opacity}
-                    onChange={e => setOperadoConfig({ ...operadoConfig, opacity: Number(e.target.value) })}
-                    className="w-full accent-[#581c2f] cursor-pointer"
-                  />
+                  <div className="flex-1 min-w-0 text-[11px]">
+                    <p className="font-semibold text-slate-800 truncate">
+                      {operadoConfig.shieldImageUrl ? 'Escudo PNG Personalizado' : 'Escudo Oficial La Paz (Vectorial SVG)'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      {operadoConfig.shieldImageUrl ? 'Transparente cargado' : 'Renderizado nítido alta fidelidad'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => shieldInputRef.current?.click()}
+                      className="px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-[#003399] border border-blue-200 text-[10px] font-bold transition cursor-pointer"
+                    >
+                      Subir PNG
+                    </button>
+                    {operadoConfig.shieldImageUrl && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveShield}
+                        className="p-1 rounded text-red-500 hover:bg-red-50 transition cursor-pointer"
+                        title="Restablecer a escudo vectorial oficial"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Líneas Institucionales Editables */}
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                      Línea 1 (Superior)
+                    </label>
+                    <input
+                      type="text"
+                      value={operadoConfig.institutionLine1 || 'H. AYUNTAMIENTO'}
+                      onChange={e => setOperadoConfig({ ...operadoConfig, institutionLine1: e.target.value.toUpperCase() })}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-slate-800 font-bold focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                      Línea 2 (Central - En Negrita)
+                    </label>
+                    <input
+                      type="text"
+                      value={operadoConfig.institutionLine2 || 'DE LA PAZ'}
+                      onChange={e => setOperadoConfig({ ...operadoConfig, institutionLine2: e.target.value.toUpperCase() })}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-[#003399] font-black focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                      Línea 3 (Periodo de Gobierno)
+                    </label>
+                    <input
+                      type="text"
+                      value={operadoConfig.institutionLine3 || '2024 - 2027'}
+                      onChange={e => setOperadoConfig({ ...operadoConfig, institutionLine3: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-xs text-slate-700 font-semibold focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Textos Institucionales Editables */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Encabezado Institucional
+              {/* ── 4. DIMENSIONES Y EFECTO TINTA REALISTA (85%-90%) ── */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-extrabold text-slate-800 uppercase">
+                    Dimensiones y Efecto Tinta Físicamente Realista
                   </label>
-                  <input
-                    type="text"
-                    value={operadoConfig.institutionText}
-                    onChange={e => setOperadoConfig({ ...operadoConfig, institutionText: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 bg-[#FDFBF9] p-2 text-xs text-slate-800 focus:outline-none"
-                  />
+                  <span className="text-[10px] font-mono font-bold text-[#003399] bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {operadoConfig.width || 210} × {operadoConfig.height || 105} pt
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                    Subtexto / Fondo
-                  </label>
+
+                {/* Presets Rápidos de Tamaño */}
+                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-bold">
+                  {[
+                    { label: 'Compacto', w: 170, h: 85 },
+                    { label: 'Estándar Oficial', w: 210, h: 105 },
+                    { label: 'Amplio', w: 250, h: 125 }
+                  ].map(sz => (
+                    <button
+                      key={sz.label}
+                      type="button"
+                      onClick={() => setOperadoConfig({ ...operadoConfig, width: sz.w, height: sz.h })}
+                      className={`p-1.5 rounded-lg border text-center transition cursor-pointer ${
+                        operadoConfig.width === sz.w
+                          ? 'bg-[#003399] text-white border-[#003399]'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {sz.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Slider de Opacidad Realista (85% a 90%) */}
+                <div className="pt-2 border-t border-slate-200/80">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-700 uppercase mb-1">
+                    <span>Opacidad / Textura de Tinta Real</span>
+                    <span className="text-[#003399] font-mono font-bold">{operadoConfig.opacity}%</span>
+                  </div>
                   <input
-                    type="text"
-                    value={operadoConfig.subText}
-                    onChange={e => setOperadoConfig({ ...operadoConfig, subText: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 bg-[#FDFBF9] p-2 text-xs text-slate-800 focus:outline-none"
+                    type="range"
+                    min={20}
+                    max={100}
+                    value={operadoConfig.opacity}
+                    onChange={e => setOperadoConfig({ ...operadoConfig, opacity: Number(e.target.value) })}
+                    className="w-full accent-[#003399] cursor-pointer"
                   />
+                  <p className="text-[9.5px] text-slate-400 mt-1 leading-tight">
+                    Calibrada a ~88% para emular el estampado de tinta líquida sin tapar de forma opaca el texto del documento original.
+                  </p>
                 </div>
               </div>
 
               {/* Posicionamiento Independiente Sello OPERADO */}
               <div className="pt-2 border-t border-slate-100">
                 <PositionMatrix3x3
-                  label="Ubicación del Sello OPERADO (Matriz 3x3)"
+                  label="Ubicación del Sello Oficial (Matriz 3x3)"
                   currentMatrix={operadoConfig.positionMatrix}
                   normX={operadoConfig.normX}
                   normY={operadoConfig.normY}
@@ -1572,6 +1722,13 @@ export default function FolioVisualEditor({
                 positionMatrix: 'free',
                 normX: nx,
                 normY: ny
+              }));
+            }}
+            onUpdateOperadoSize={(w, h) => {
+              setOperadoConfig(prev => ({
+                ...prev,
+                width: w,
+                height: h
               }));
             }}
             onUpdateLogoPosition={(nx, ny) => {

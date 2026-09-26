@@ -13,6 +13,7 @@ import {
   formatOfficialStampDate,
   generateFolioString
 } from './stampEngine';
+import OfficialStamp from './OfficialStamp';
 
 export type ActiveElement = 'folio' | 'operado' | 'logo';
 
@@ -27,6 +28,7 @@ interface FolioPreviewCanvasProps {
   logoPreviewUrl: string | null;
   onUpdateFolioPosition: (normX: number, normY: number) => void;
   onUpdateOperadoPosition: (normX: number, normY: number) => void;
+  onUpdateOperadoSize?: (width: number, height: number) => void;
   onUpdateLogoPosition: (normX: number, normY: number) => void;
   activeDocumentName?: string;
   totalPages?: number;
@@ -43,6 +45,7 @@ export default function FolioPreviewCanvas({
   logoPreviewUrl,
   onUpdateFolioPosition,
   onUpdateOperadoPosition,
+  onUpdateOperadoSize,
   onUpdateLogoPosition,
   activeDocumentName,
   totalPages = 1
@@ -88,8 +91,8 @@ export default function FolioPreviewCanvas({
     let elemW = 160;
     let elemH = 50;
     if (draggingTarget === 'operado') {
-      elemW = (operadoConfig.width || 190) * 0.9;
-      elemH = (operadoConfig.height || 85) * 0.9;
+      elemW = (operadoConfig.width || 210) * 0.78;
+      elemH = (operadoConfig.height || 105) * 0.78;
     } else if (draggingTarget === 'logo') {
       elemW = (logoConfig.width || 60) * 0.9;
       elemH = (logoConfig.height || 60) * 0.9;
@@ -278,7 +281,7 @@ export default function FolioPreviewCanvas({
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
-          {/* 2. ELEMENTO ARRASTRABLE: SELLO OFICIAL "OPERADO"                     */}
+          {/* 2. ELEMENTO ARRASTRABLE: SELLO OFICIAL DE TRES NIVELES ("OPERADO")   */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {operadoConfig.enabled && (
             <div
@@ -289,73 +292,40 @@ export default function FolioPreviewCanvas({
                 left: `calc(${operadoConfig.normX * 100}% + ${operadoConfig.offsetX * 0.4}px)`,
                 top: `calc(${operadoConfig.normY * 100}% + ${operadoConfig.offsetY * 0.4}px)`,
                 transform: 'translate(-50%, -50%)',
-                opacity: operadoConfig.isUnderlay
-                  ? Math.min(0.40, Math.max(0.15, operadoConfig.opacity / 100))
-                  : operadoConfig.opacity / 100,
-                borderColor: operadoConfig.colorHex,
                 cursor: draggingTarget === 'operado' ? 'grabbing' : 'grab'
               }}
-              className={`group z-10 transition-shadow select-none rounded-md p-2 bg-white/90 border-2 shadow-xs ${
+              className={`group z-20 transition-all select-none rounded-lg ${
                 activeElement === 'operado'
-                  ? 'ring-2 ring-red-600 ring-offset-1 shadow-lg'
-                  : 'hover:ring-1 hover:ring-slate-400'
+                  ? 'ring-2 ring-blue-600 ring-offset-2 shadow-xl'
+                  : 'hover:ring-1 hover:ring-blue-400'
               }`}
             >
-              {/* Badge Indicador de Capa de Fondo (Underlay) */}
-              {operadoConfig.isUnderlay && (
-                <div className="absolute -top-4 right-1 bg-amber-100 text-amber-900 border border-amber-300 text-[7px] font-bold px-1 rounded shadow-2xs">
-                  Capa Fondo (Legible)
-                </div>
-              )}
-
-              {/* Tooltip de Coordenadas Flotante */}
-              <div className="hidden group-hover:flex absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-xs">
-                Sello OPERADO • X: {Math.round(operadoConfig.normX * 100)}% Y: {Math.round(operadoConfig.normY * 100)}%
+              {/* Tooltip de Coordenadas y Dimensiones Flotante */}
+              <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-2 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
+                Sello Oficial 3 Niveles • X: {Math.round(operadoConfig.normX * 100)}% Y: {Math.round(operadoConfig.normY * 100)}% ({operadoConfig.width || 210}×{operadoConfig.height || 105} pt)
               </div>
 
-              {/* Marco Interior Oficial Punteado / Fino */}
-              <div
-                style={{ borderColor: operadoConfig.colorHex }}
-                className="border p-1.5 rounded-xs flex flex-col items-center justify-center text-center min-w-[130px] max-w-[170px]"
-              >
-                {/* Encabezado Institucional */}
-                <div
-                  style={{ color: operadoConfig.colorHex }}
-                  className="text-[6.5px] font-extrabold uppercase tracking-tight truncate max-w-[140px]"
-                >
-                  {operadoConfig.institutionText || 'PAZSUMA • GESTIÓN PÚBLICA'}
-                </div>
-
-                <div className="w-full h-px my-0.5 bg-slate-300 opacity-60" />
-
-                {/* Gran Palabra OPERADO */}
-                <div
-                  style={{ color: operadoConfig.colorHex }}
-                  className="text-xs font-black tracking-widest uppercase my-0.5"
-                >
-                  {operadoConfig.operadoWord || 'OPERADO'}
-                </div>
-
-                <div className="w-full h-px my-0.5 bg-slate-300 opacity-60" />
-
-                {/* FECHA OFICIAL EN ROJO INSTITUCIONAL (Requisito Crítico) */}
-                <div className="my-0.5 px-2 py-0.5 rounded bg-red-50/90 border border-red-200">
-                  <span
-                    style={{ color: operadoConfig.dateColorHex || '#dc2626' }}
-                    className="font-mono text-[9px] font-black tracking-wider uppercase"
-                  >
-                    {operadoFormattedDate}
-                  </span>
-                </div>
-
-                {/* Subtexto */}
-                <div
-                  style={{ color: operadoConfig.colorHex }}
-                  className="text-[5.5px] font-bold uppercase tracking-tighter opacity-80 mt-0.5 truncate max-w-[140px]"
-                >
-                  {operadoConfig.subText || 'COMPROBADO Y ARCHIVADO'}
-                </div>
-              </div>
+              {/* Sello Oficial de Tres Niveles: OPERADO (Azul) + Fecha (Rojo) + H. Ayuntamiento (Azul) */}
+              <OfficialStamp
+                date={operadoConfig.stampDateIso}
+                operadoText={operadoConfig.operadoWord || 'OPERADO'}
+                institutionLine1={operadoConfig.institutionLine1 || operadoConfig.institutionText || 'H. AYUNTAMIENTO'}
+                institutionLine2={operadoConfig.institutionLine2 || 'DE LA PAZ'}
+                institutionLine3={operadoConfig.institutionLine3 || '2024 - 2027'}
+                inkBlue={operadoConfig.colorHex || '#003399'}
+                inkRed={operadoConfig.dateColorHex || '#E62B4A'}
+                opacity={operadoConfig.opacity || 88}
+                width={(operadoConfig.width || 210) * 0.78}
+                height={(operadoConfig.height || 105) * 0.78}
+                shieldImageUrl={operadoConfig.shieldImageUrl || null}
+                isSelected={activeElement === 'operado'}
+                isInteractive={true}
+                onResize={(newW, newH) => {
+                  if (onUpdateOperadoSize) {
+                    onUpdateOperadoSize(Math.round(newW / 0.78), Math.round(newH / 0.78));
+                  }
+                }}
+              />
             </div>
           )}
 
@@ -406,8 +376,8 @@ export default function FolioPreviewCanvas({
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-red-600" />
-            <span>Sello OPERADO: {operadoConfig.enabled ? 'Activo (Fecha Roja)' : 'Oculto'}</span>
+            <span className="h-2 w-2 rounded-full bg-[#003399]" />
+            <span>Sello Oficial 3 Niveles: {operadoConfig.enabled ? 'Activo (#003399 • #E62B4A)' : 'Oculto'}</span>
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">

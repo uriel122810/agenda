@@ -64,11 +64,11 @@ function formatBytes(bytes: number): string {
 }
 
 const COLOR_PRESETS = [
-  { id: 'negro',  label: 'Negro Tinta',   hex: '#111827' },
-  { id: 'rojo',   label: 'Rojo Tinta',    hex: '#dc2626' },
-  { id: 'azul',   label: 'Azul Notarial', hex: '#003399' },
-  { id: 'guinda', label: 'Vino PazSuma',  hex: '#581c2f' },
-  { id: 'dorado', label: 'Dorado Oficial', hex: '#b39656' }
+  { id: 'negro',  label: 'Negro Tinta',        hex: '#111827' },
+  { id: 'rojo',   label: 'Rojo Tinta',         hex: '#dc2626' },
+  { id: 'azul',   label: 'Azul Institucional',  hex: '#003399' },
+  { id: 'guinda', label: 'Vino PazSuma',       hex: '#581c2f' },
+  { id: 'dorado', label: 'Dorado Oficial',      hex: '#b39656' }
 ];
 
 export default function FolioVisualEditor({
@@ -180,18 +180,18 @@ export default function FolioVisualEditor({
   const [overallSuccessMessage, setOverallSuccessMessage] = useState<string>('');
   const [isZipping, setIsZipping] = useState(false);
 
-  // Sincronizar initialFolio si cambia
+  // Sincronizar initialFolio si cambia (extrayendo únicamente el número para foleo numérico puro)
   useEffect(() => {
     if (initialFolio) {
-      const match = initialFolio.match(/^(.*?)(\d+)$/);
+      const match = initialFolio.match(/(\d+)$/);
       if (match) {
-        const prefix = match[1];
-        const num = parseInt(match[2], 10);
+        const num = parseInt(match[1], 10);
         setFolioConfig(prev => ({
           ...prev,
-          prefix: prefix,
+          prefix: '',
+          suffix: '',
           startNumber: isNaN(num) ? 1 : num,
-          padLength: match[2].length
+          padLength: match[1].length
         }));
       }
     }
@@ -609,15 +609,20 @@ export default function FolioVisualEditor({
         {/* COLUMNA IZQUIERDA: PANEL DE PARÁMETROS AVANZADO */}
         <div className="lg:col-span-5 space-y-4">
           {/* ── SELECTOR PRINCIPAL DE MODALIDAD DE ESTAMPADO ── */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-3.5 rounded-2xl shadow-md border border-slate-700/60 space-y-2.5">
+          <div className="bg-[#fbf0f3]/70 rounded-2xl border border-[#eed7dc] p-3.5 space-y-2.5 shadow-2xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-400" />
-                <span className="text-[11px] font-extrabold tracking-wider uppercase text-slate-200">
-                  Modalidad de Estampado
-                </span>
+                <div className="h-6 w-6 rounded-lg bg-[#581c2f] text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Sparkles className="h-3.5 w-3.5 text-[#b39656]" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#581c2f]">
+                    Modalidad de Estampado
+                  </span>
+                  <p className="text-[10px] text-slate-500">Selecciona los elementos a estampar en el documento</p>
+                </div>
               </div>
-              <span className="text-[10px] font-semibold text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-600">
+              <span className="text-[10px] font-bold text-[#581c2f] bg-white px-2.5 py-1 rounded-full border border-[#eed7dc] shadow-2xs">
                 {operadoConfig.enabled && folioConfig.enabled
                   ? 'Sello + Folio Activos'
                   : operadoConfig.enabled
@@ -640,11 +645,11 @@ export default function FolioVisualEditor({
                 }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition cursor-pointer ${
                   operadoConfig.enabled && !folioConfig.enabled
-                    ? 'bg-blue-600 text-white border-blue-400 shadow-md ring-2 ring-blue-400/50 scale-[1.02]'
-                    : 'bg-slate-800/90 hover:bg-slate-750 text-slate-300 border-slate-700 hover:border-slate-600'
+                    ? 'bg-[#581c2f] text-white border-[#581c2f] shadow-sm scale-[1.02]'
+                    : 'bg-white hover:bg-[#fbf0f3] text-slate-700 border-[#eed7dc] hover:border-[#581c2f]'
                 }`}
               >
-                <Stamp className="h-4 w-4 mb-1 text-blue-300" />
+                <Stamp className={`h-4 w-4 mb-1 ${operadoConfig.enabled && !folioConfig.enabled ? 'text-[#b39656]' : 'text-[#581c2f]'}`} />
                 <span className="text-xs font-bold leading-tight">Solo Sello</span>
                 <span className="text-[9px] opacity-75 mt-0.5">OPERADO 3 niveles</span>
               </button>
@@ -660,11 +665,11 @@ export default function FolioVisualEditor({
                 }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition cursor-pointer ${
                   !operadoConfig.enabled && folioConfig.enabled
-                    ? 'bg-[#581c2f] text-white border-rose-400 shadow-md ring-2 ring-rose-400/50 scale-[1.02]'
-                    : 'bg-slate-800/90 hover:bg-slate-750 text-slate-300 border-slate-700 hover:border-slate-600'
+                    ? 'bg-[#581c2f] text-white border-[#581c2f] shadow-sm scale-[1.02]'
+                    : 'bg-white hover:bg-[#fbf0f3] text-slate-700 border-[#eed7dc] hover:border-[#581c2f]'
                 }`}
               >
-                <Hash className="h-4 w-4 mb-1 text-rose-300" />
+                <Hash className={`h-4 w-4 mb-1 ${!operadoConfig.enabled && folioConfig.enabled ? 'text-[#b39656]' : 'text-[#581c2f]'}`} />
                 <span className="text-xs font-bold leading-tight">Solo Folio</span>
                 <span className="text-[9px] opacity-75 mt-0.5">Numérico simple</span>
               </button>
@@ -678,11 +683,11 @@ export default function FolioVisualEditor({
                 }}
                 className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition cursor-pointer ${
                   operadoConfig.enabled && folioConfig.enabled
-                    ? 'bg-gradient-to-r from-blue-600 to-[#581c2f] text-white border-indigo-400 shadow-md ring-2 ring-indigo-400/50 scale-[1.02]'
-                    : 'bg-slate-800/90 hover:bg-slate-750 text-slate-300 border-slate-700 hover:border-slate-600'
+                    ? 'bg-[#581c2f] text-white border-[#581c2f] shadow-sm scale-[1.02]'
+                    : 'bg-white hover:bg-[#fbf0f3] text-slate-700 border-[#eed7dc] hover:border-[#581c2f]'
                 }`}
               >
-                <Layers className="h-4 w-4 mb-1 text-indigo-300" />
+                <Layers className={`h-4 w-4 mb-1 ${operadoConfig.enabled && folioConfig.enabled ? 'text-[#b39656]' : 'text-[#581c2f]'}`} />
                 <span className="text-xs font-bold leading-tight">Ambos a la vez</span>
                 <span className="text-[9px] opacity-75 mt-0.5">Sello + Folio</span>
               </button>
@@ -690,7 +695,7 @@ export default function FolioVisualEditor({
           </div>
 
           {/* BARRA DE PESTAÑAS DEL PANEL DE CONTROL */}
-          <div className="bg-slate-100/80 p-1 rounded-2xl border border-slate-200 grid grid-cols-4 gap-1">
+          <div className="bg-[#fbf0f3] p-1 rounded-2xl border border-[#eed7dc] grid grid-cols-4 gap-1">
             <button
               type="button"
               onClick={() => {
@@ -699,8 +704,8 @@ export default function FolioVisualEditor({
               }}
               className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
                 activeTab === 'folio'
-                  ? 'bg-white text-[#581c2f] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-[#581c2f] shadow-xs border border-[#eed7dc]'
+                  : 'text-slate-600 hover:text-[#581c2f] hover:bg-white/60'
               }`}
             >
               <Hash className="h-3.5 w-3.5" />
@@ -715,8 +720,8 @@ export default function FolioVisualEditor({
               }}
               className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
                 activeTab === 'operado'
-                  ? 'bg-white text-[#581c2f] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-[#581c2f] shadow-xs border border-[#eed7dc]'
+                  : 'text-slate-600 hover:text-[#581c2f] hover:bg-white/60'
               }`}
             >
               <Stamp className="h-3.5 w-3.5" />
@@ -731,8 +736,8 @@ export default function FolioVisualEditor({
               }}
               className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
                 activeTab === 'logo'
-                  ? 'bg-white text-[#581c2f] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-[#581c2f] shadow-xs border border-[#eed7dc]'
+                  : 'text-slate-600 hover:text-[#581c2f] hover:bg-white/60'
               }`}
             >
               <ImageIcon className="h-3.5 w-3.5" />
@@ -744,8 +749,8 @@ export default function FolioVisualEditor({
               onClick={() => setActiveTab('paginas')}
               className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
                 activeTab === 'paginas'
-                  ? 'bg-white text-[#581c2f] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-[#581c2f] shadow-xs border border-[#eed7dc]'
+                  : 'text-slate-600 hover:text-[#581c2f] hover:bg-white/60'
               }`}
             >
               <Layers className="h-3.5 w-3.5" />
@@ -757,20 +762,22 @@ export default function FolioVisualEditor({
           {/* PESTAÑA 1: CONTROLES DE FOLIO NUMÉRICO CONFIGURABLE               */}
           {/* ═════════════════════════════════════════════════════════════════ */}
           {activeTab === 'folio' && (
-            <div className="rounded-2xl border border-[#E8E2D9] bg-white p-4 shadow-2xs space-y-4 animate-in fade-in">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div className="rounded-2xl border border-[#eed7dc] bg-white p-4 shadow-2xs space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between border-b border-[#eed7dc]/60 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <Hash className="h-4 w-4 text-[#581c2f]" />
+                  <div className="h-6 w-6 rounded-lg bg-[#581c2f] text-white flex items-center justify-center shrink-0">
+                    <Hash className="h-3.5 w-3.5 text-[#b39656]" />
+                  </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      Folio Numérico Simple Configurable
+                      Foleo Numérico Simple
                     </h3>
-                    <p className="text-[10px] text-slate-400">
-                      Numeración consecutiva limpia y vectorizada en PDF
+                    <p className="text-[10px] text-slate-500">
+                      Numeración consecutiva pura sin prefijos ni sufijos
                     </p>
                   </div>
                 </div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-[#581c2f] bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-[#581c2f] bg-[#fbf0f3] border border-[#eed7dc] px-2.5 py-1 rounded-xl cursor-pointer hover:bg-[#eed7dc]/40 transition">
                   <input
                     type="checkbox"
                     checked={folioConfig.enabled}
@@ -781,118 +788,76 @@ export default function FolioVisualEditor({
                 </label>
               </div>
 
-              {/* Presets Rápidos de Formato */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                  Formato y Máscara de Folio
-                </label>
+              {/* Relleno con Ceros a la Izquierda (Dígitos / Padding) */}
+              <div className="p-3 bg-[#fbf0f3]/40 rounded-xl border border-[#eed7dc] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+                      Formato Numérico y Ceros a la Izquierda
+                    </span>
+                    <span className="block text-[10px] text-slate-500">
+                      El foleo es exclusivamente numérico (ej. 136, 008, 000009)
+                    </span>
+                  </div>
+
+                  {/* Muestra viva del número resultante */}
+                  <div className="flex items-center gap-1.5 bg-white border border-[#eed7dc] px-3 py-1 rounded-xl shadow-2xs">
+                    <span className="text-[10px] text-slate-500 font-medium">Ejemplo:</span>
+                    <span className="font-mono font-bold text-sm text-[#581c2f]">
+                      {generateFolioString(0, folioConfig)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Presets Rápidos de Cantidad de Dígitos */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                   {[
-                    { id: 'numeric', label: '001 (Numérico)', prefix: '', pad: 3, suffix: '' },
-                    { id: '000000', label: '000136 (6 Dígitos)', prefix: '', pad: 6, suffix: '' },
-                    { id: 'custom-n', label: 'N° 001', prefix: 'N° ', pad: 3, suffix: '' },
-                    { id: 'custom-fol', label: 'FOLIO: 001', prefix: 'FOLIO: ', pad: 3, suffix: '' },
-                    { id: 'FOL-2026-000', label: 'FOL-2026-001', prefix: 'FOL-2026-', pad: 3, suffix: '' },
-                    { id: 'custom', label: 'Personalizado', prefix: folioConfig.prefix, pad: folioConfig.padLength, suffix: folioConfig.suffix }
-                  ].map(f => {
-                    const isSelected =
-                      f.id === 'custom'
-                        ? folioConfig.formatPreset === 'custom'
-                        : folioConfig.prefix === f.prefix &&
-                          folioConfig.padLength === f.pad &&
-                          folioConfig.suffix === f.suffix;
+                    { pad: 1, label: '1 dígito (136)', desc: 'Sin ceros a la izquierda' },
+                    { pad: 2, label: '2 dígitos (08)', desc: '08, 09, 10' },
+                    { pad: 3, label: '3 dígitos (008)', desc: '008, 009, 010' },
+                    { pad: 4, label: '4 dígitos (0008)', desc: '0008, 0009' },
+                    { pad: 6, label: '6 dígitos (000008)', desc: 'Estándar institucional' },
+                    { pad: 8, label: '8 dígitos (00000008)', desc: 'Secuencia extendida' }
+                  ].map(preset => {
+                    const isSelected = folioConfig.padLength === preset.pad;
                     return (
                       <button
-                        key={f.id}
+                        key={preset.pad}
                         type="button"
-                        onClick={() => {
-                          if (f.id === 'custom') {
-                            setFolioConfig({ ...folioConfig, formatPreset: 'custom' });
-                          } else {
-                            setFolioConfig({
-                              ...folioConfig,
-                              formatPreset: f.id.startsWith('custom') ? 'custom' : (f.id as any),
-                              prefix: f.prefix,
-                              padLength: f.pad,
-                              suffix: f.suffix
-                            });
-                          }
-                        }}
-                        className={`p-1.5 rounded-xl text-center text-xs font-mono font-bold border transition cursor-pointer ${
+                        onClick={() => setFolioConfig({ ...folioConfig, padLength: preset.pad, formatPreset: 'numeric' })}
+                        className={`p-2 rounded-xl text-left transition cursor-pointer border ${
                           isSelected
-                            ? 'border-[#581c2f] bg-[#FBF0F3] text-[#581c2f]'
-                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            ? 'bg-[#581c2f] text-white border-[#581c2f] shadow-2xs'
+                            : 'bg-white border-[#eed7dc] text-slate-700 hover:bg-[#fbf0f3] hover:text-[#581c2f]'
                         }`}
                       >
-                        {f.label}
+                        <span className="block text-xs font-mono font-bold">{preset.label}</span>
+                        <span className={`block text-[9px] ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
+                          {preset.desc}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
-              </div>
 
-              {/* Prefijo, Relleno de Ceros y Sufijo */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-                <div className="grid grid-cols-12 gap-2 text-xs">
-                  {/* Prefijo */}
-                  <div className="col-span-5">
-                    <span className="block text-[10px] font-bold text-slate-600 mb-1">Prefijo (Opcional)</span>
-                    <input
-                      type="text"
-                      value={folioConfig.prefix}
-                      onChange={e => setFolioConfig({ ...folioConfig, prefix: e.target.value })}
-                      placeholder="Ej: N° , FOLIO: "
-                      className="w-full p-2 rounded-lg border border-slate-300 bg-white font-mono font-bold text-slate-800 text-xs focus:outline-none focus:border-[#581c2f]"
-                    />
-                  </div>
-
-                  {/* Cantidad de Dígitos (Padding) */}
-                  <div className="col-span-3">
-                    <span className="block text-[10px] font-bold text-slate-600 mb-1">Dígitos</span>
+                {/* Selector numérico manual de longitud de dígitos */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#eed7dc]/60 text-xs">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase">Longitud exacta de dígitos:</span>
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       min={1}
                       max={10}
                       value={folioConfig.padLength}
                       onChange={e => setFolioConfig({ ...folioConfig, padLength: Math.max(1, Math.min(10, Number(e.target.value))) })}
-                      className="w-full p-2 rounded-lg border border-slate-300 bg-white font-mono font-bold text-[#581c2f] text-xs text-center focus:outline-none focus:border-[#581c2f]"
+                      className="w-14 p-1.5 rounded-lg border border-[#eed7dc] bg-white font-mono font-bold text-[#581c2f] text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#581c2f]/20"
                     />
+                    <span className="text-slate-500 font-mono text-[11px]">dígitos</span>
                   </div>
-
-                  {/* Sufijo */}
-                  <div className="col-span-4">
-                    <span className="block text-[10px] font-bold text-slate-600 mb-1">Sufijo (Opcional)</span>
-                    <input
-                      type="text"
-                      value={folioConfig.suffix}
-                      onChange={e => setFolioConfig({ ...folioConfig, suffix: e.target.value })}
-                      placeholder="Ej: /2026, -BIS"
-                      className="w-full p-2 rounded-lg border border-slate-300 bg-white font-mono font-bold text-slate-800 text-xs focus:outline-none focus:border-[#581c2f]"
-                    />
-                  </div>
-                </div>
-
-                {/* Botones rápidos de cantidad de dígitos */}
-                <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/80">
-                  <span className="text-[10px] text-slate-500 font-medium">Ceros de relleno:</span>
-                  {[1, 2, 3, 4, 6, 8].map(digits => (
-                    <button
-                      key={digits}
-                      type="button"
-                      onClick={() => setFolioConfig({ ...folioConfig, padLength: digits })}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border cursor-pointer transition ${
-                        folioConfig.padLength === digits
-                          ? 'bg-[#581c2f] text-white border-[#581c2f]'
-                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {digits} {digits === 1 ? 'dígito' : 'dígitos'}
-                    </button>
-                  ))}
                 </div>
               </div>
 
-              {/* Número Inicial e Incremento */}
+              {/* Número Inicial y Paso de Incremento */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
@@ -903,7 +868,7 @@ export default function FolioVisualEditor({
                     min={0}
                     value={folioConfig.startNumber}
                     onChange={e => setFolioConfig({ ...folioConfig, startNumber: Number(e.target.value) })}
-                    className="w-full rounded-lg border border-slate-200 bg-[#FDFBF9] p-2 text-xs font-mono font-bold text-[#581c2f] focus:outline-none"
+                    className="w-full rounded-xl border border-[#eed7dc] bg-white p-2 text-xs font-mono font-bold text-[#581c2f] focus:outline-none focus:ring-2 focus:ring-[#581c2f]/20"
                   />
                 </div>
                 <div>
@@ -915,13 +880,13 @@ export default function FolioVisualEditor({
                     min={1}
                     value={folioConfig.increment}
                     onChange={e => setFolioConfig({ ...folioConfig, increment: Number(e.target.value) })}
-                    className="w-full rounded-lg border border-slate-200 bg-[#FDFBF9] p-2 text-xs font-mono font-bold text-slate-800 focus:outline-none"
+                    className="w-full rounded-xl border border-[#eed7dc] bg-white p-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#581c2f]/20"
                   />
                 </div>
               </div>
 
               {/* 1. SELECCIÓN DE TIPO DE FUENTE (TYPOGRAPHY) Y 2. TAMAÑO */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-3">
+              <div className="rounded-xl border border-[#eed7dc] bg-[#fbf0f3]/30 p-3 space-y-3">
                 <div className="grid grid-cols-12 gap-3 items-end">
                   {/* Tipografía StandardFonts */}
                   <div className="col-span-7">
@@ -931,13 +896,12 @@ export default function FolioVisualEditor({
                     <select
                       value={folioConfig.fontChoice}
                       onChange={e => setFolioConfig({ ...folioConfig, fontChoice: e.target.value as any })}
-                      className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#581c2f]"
+                      className="w-full rounded-xl border border-[#eed7dc] bg-white p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#581c2f] focus:ring-2 focus:ring-[#581c2f]/20 cursor-pointer"
                     >
                       <option value="Helvetica">Helvetica (Moderna Sans)</option>
                       <option value="Helvetica-Bold">Helvetica-Bold (Negrita Sans)</option>
                       <option value="Times-Roman">Times-Roman (Clásica Serif)</option>
                       <option value="Courier">Courier (Monospace Máquina de Escribir)</option>
-                      <option value="Courier-Bold">Courier-Bold (Monospace Negrita)</option>
                     </select>
                   </div>
 
@@ -946,10 +910,10 @@ export default function FolioVisualEditor({
                     <button
                       type="button"
                       onClick={() => setFolioConfig({ ...folioConfig, isBold: !folioConfig.isBold })}
-                      className={`w-full p-2 rounded-lg border flex items-center justify-center gap-1 text-xs font-bold transition cursor-pointer ${
+                      className={`w-full p-2 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-bold transition cursor-pointer ${
                         folioConfig.isBold || folioConfig.fontChoice.includes('Bold')
-                          ? 'bg-[#581c2f] text-white border-[#581c2f]'
-                          : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                          ? 'bg-[#581c2f] text-white border-[#581c2f] shadow-2xs'
+                          : 'bg-white border-[#eed7dc] text-slate-700 hover:bg-[#fbf0f3] hover:text-[#581c2f]'
                       }`}
                     >
                       <Bold className="h-3.5 w-3.5" />
@@ -959,7 +923,7 @@ export default function FolioVisualEditor({
                 </div>
 
                 {/* Tamaño de Fuente (Slider + Control Numérico + Pills) */}
-                <div className="space-y-1.5 pt-1 border-t border-slate-200/80">
+                <div className="space-y-1.5 pt-2 border-t border-[#eed7dc]/60">
                   <div className="flex justify-between items-center text-[10px] font-bold text-slate-700 uppercase">
                     <span>Tamaño de Letra (Font Size)</span>
                     <div className="flex items-center gap-1">
@@ -969,7 +933,7 @@ export default function FolioVisualEditor({
                         max={48}
                         value={folioConfig.fontSize}
                         onChange={e => setFolioConfig({ ...folioConfig, fontSize: Math.max(8, Math.min(48, Number(e.target.value))) })}
-                        className="w-12 text-center py-0.5 rounded border border-slate-300 font-bold text-[#581c2f] bg-white text-xs"
+                        className="w-12 text-center py-0.5 rounded-lg border border-[#eed7dc] font-bold text-[#581c2f] bg-white text-xs focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                       />
                       <span className="text-slate-500 font-mono">pt</span>
                     </div>
@@ -991,10 +955,10 @@ export default function FolioVisualEditor({
                         key={sz}
                         type="button"
                         onClick={() => setFolioConfig({ ...folioConfig, fontSize: sz })}
-                        className={`text-[10px] px-2 py-0.5 rounded border font-mono font-bold cursor-pointer transition ${
+                        className={`text-[10px] px-2 py-0.5 rounded-lg border font-mono font-bold cursor-pointer transition ${
                           folioConfig.fontSize === sz
-                            ? 'bg-[#581c2f] text-white border-[#581c2f]'
-                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            ? 'bg-[#581c2f] text-white border-[#581c2f] shadow-2xs'
+                            : 'bg-white text-slate-600 border-[#eed7dc] hover:bg-[#fbf0f3] hover:text-[#581c2f]'
                         }`}
                       >
                         {sz}pt
@@ -1010,27 +974,30 @@ export default function FolioVisualEditor({
                   Color de Fuente (Tinta)
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {COLOR_PRESETS.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setFolioConfig({ ...folioConfig, colorHex: c.hex })}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition ${
-                        folioConfig.colorHex.toLowerCase() === c.hex.toLowerCase()
-                          ? 'border-[#581c2f] bg-[#FBF0F3] text-[#581c2f]'
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: c.hex }} />
-                      <span>{c.label}</span>
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-1 bg-white">
+                  {COLOR_PRESETS.map(c => {
+                    const isSelected = folioConfig.colorHex.toLowerCase() === c.hex.toLowerCase();
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setFolioConfig({ ...folioConfig, colorHex: c.hex })}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition ${
+                          isSelected
+                            ? 'border-[#581c2f] bg-[#fbf0f3] text-[#581c2f] font-bold shadow-2xs ring-1 ring-[#581c2f]'
+                            : 'border-[#eed7dc] bg-white text-slate-700 hover:bg-[#fbf0f3] hover:text-[#581c2f]'
+                        }`}
+                      >
+                        <span className="h-3.5 w-3.5 rounded-full border border-black/10 shrink-0" style={{ backgroundColor: c.hex }} />
+                        <span>{c.label}</span>
+                      </button>
+                    );
+                  })}
+                  <div className="flex items-center gap-1.5 border border-[#eed7dc] rounded-xl px-2 py-1 bg-white">
                     <input
                       type="color"
                       value={folioConfig.colorHex}
                       onChange={e => setFolioConfig({ ...folioConfig, colorHex: e.target.value })}
-                      className="h-6 w-6 rounded cursor-pointer border-0 p-0"
+                      className="h-5 w-5 rounded cursor-pointer border-0 p-0"
                     />
                     <input
                       type="text"
@@ -1059,8 +1026,8 @@ export default function FolioVisualEditor({
                       onClick={() => setFolioConfig({ ...folioConfig, style: st.id as any })}
                       className={`p-2 rounded-xl border text-center transition cursor-pointer ${
                         folioConfig.style === st.id
-                          ? 'border-[#581c2f] bg-[#FBF0F3] text-[#581c2f] font-bold'
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold'
+                          ? 'border-[#581c2f] bg-[#fbf0f3] text-[#581c2f] font-bold shadow-2xs'
+                          : 'border-[#eed7dc] bg-white text-slate-700 hover:bg-[#fbf0f3] text-xs font-semibold'
                       }`}
                     >
                       <span className="block text-xs">{st.label}</span>
@@ -1069,10 +1036,10 @@ export default function FolioVisualEditor({
                   ))}
                 </div>
 
-                <div className="mt-2.5 flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="mt-2.5 flex items-center justify-between p-2.5 rounded-xl bg-[#fbf0f3]/30 border border-[#eed7dc]">
                   <div>
-                    <span className="block text-xs font-bold text-slate-800">Metadatos y Membrete Institucional</span>
-                    <span className="block text-[10px] text-slate-500">Incluye leyenda superior y fecha de estampado</span>
+                    <span className="block text-xs font-bold text-slate-800">Membrete y Fecha de Estampado</span>
+                    <span className="block text-[10px] text-slate-500">Opcional para acompañar el número en actas formales</span>
                   </div>
                   <input
                     type="checkbox"
@@ -1084,7 +1051,7 @@ export default function FolioVisualEditor({
               </div>
 
               {/* REPLICACIÓN EN PÁGINAS DEL FOLIO (OPCIÓN INDEPENDIENTE) */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+              <div className="rounded-xl border border-[#eed7dc] bg-[#fbf0f3]/30 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
                     <Layers className="h-3.5 w-3.5 text-[#581c2f]" />
@@ -1115,7 +1082,7 @@ export default function FolioVisualEditor({
                       className={`p-1.5 rounded-lg border text-center text-xs font-semibold transition cursor-pointer ${
                         (folioConfig.pageScope || 'all') === pMode.id
                           ? 'bg-[#581c2f] text-white border-[#581c2f] font-bold shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                          : 'bg-white border-[#eed7dc] text-slate-700 hover:bg-[#fbf0f3]'
                       }`}
                     >
                       {pMode.label}
@@ -1126,23 +1093,23 @@ export default function FolioVisualEditor({
                 {folioConfig.pageScope === 'range' && (
                   <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
                     <div>
-                      <span className="block text-[10px] text-slate-500 font-bold mb-1">Desde Página</span>
+                      <span className="block text-[10px] text-slate-600 font-bold mb-1">Desde Página</span>
                       <input
                         type="number"
                         min={1}
                         value={folioConfig.rangeFrom || 1}
                         onChange={e => setFolioConfig({ ...folioConfig, rangeFrom: Math.max(1, Number(e.target.value)) })}
-                        className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-mono font-bold"
+                        className="w-full p-1.5 rounded-lg border border-[#eed7dc] bg-white font-mono font-bold text-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                       />
                     </div>
                     <div>
-                      <span className="block text-[10px] text-slate-500 font-bold mb-1">Hasta Página</span>
+                      <span className="block text-[10px] text-slate-600 font-bold mb-1">Hasta Página</span>
                       <input
                         type="number"
                         min={folioConfig.rangeFrom || 1}
                         value={folioConfig.rangeTo || 1}
                         onChange={e => setFolioConfig({ ...folioConfig, rangeTo: Math.max(1, Number(e.target.value)) })}
-                        className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-mono font-bold"
+                        className="w-full p-1.5 rounded-lg border border-[#eed7dc] bg-white font-mono font-bold text-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                       />
                     </div>
                   </div>
@@ -1150,20 +1117,20 @@ export default function FolioVisualEditor({
 
                 {folioConfig.pageScope === 'custom' && (
                   <div className="pt-1 text-xs">
-                    <span className="block text-[10px] text-slate-500 font-bold mb-1">Páginas o rangos separados por coma</span>
+                    <span className="block text-[10px] text-slate-600 font-bold mb-1">Páginas o rangos separados por coma</span>
                     <input
                       type="text"
                       value={folioConfig.customPages || ''}
                       onChange={e => setFolioConfig({ ...folioConfig, customPages: e.target.value })}
                       placeholder="Ej: 1, 3, 5-8"
-                      className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-mono font-bold"
+                      className="w-full p-1.5 rounded-lg border border-[#eed7dc] bg-white font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#581c2f]"
                     />
                   </div>
                 )}
               </div>
 
               {/* Cuadrícula 3x3 y Offsets Manuales */}
-              <div className="pt-2 border-t border-slate-100">
+              <div className="pt-2 border-t border-[#eed7dc]/60">
                 <PositionMatrix3x3
                   label="Ubicación del Folio (Matriz 3x3 y Desplazamiento)"
                   currentMatrix={folioConfig.positionMatrix}

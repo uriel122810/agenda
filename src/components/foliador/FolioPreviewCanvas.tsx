@@ -239,18 +239,18 @@ export default function FolioPreviewCanvas({
               }}
               className={`group z-25 transition-all select-none rounded-md ${
                 activeElement === 'folio'
-                  ? 'ring-2 ring-blue-600 ring-offset-2 shadow-lg'
+                  ? 'ring-2 ring-[#581c2f] ring-offset-2 shadow-lg'
                   : 'hover:ring-1 hover:ring-slate-400'
               } ${
                 folioConfig.style === 'boxed'
                   ? 'bg-white/95 border-2 shadow-xs p-2'
                   : folioConfig.style === 'line'
                   ? 'border-y-2 bg-white/70 p-2'
-                  : 'bg-white/40 hover:bg-white/80 border border-dashed border-slate-300 hover:border-blue-400 p-1.5'
+                  : 'bg-white/40 hover:bg-white/80 border border-dashed border-slate-300 hover:border-[#581c2f] p-1.5'
               }`}
             >
               {/* Tooltip de Coordenadas Flotante durante arrastre o selección */}
-              <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-2 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
+              <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-[#581c2f] text-white text-[8px] px-2 py-0.5 rounded-md font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
                 Folio Numérico • X: {Math.round(folioConfig.normX * 100)}% Y: {Math.round(folioConfig.normY * 100)}% ({folioConfig.fontSize}pt • {folioConfig.fontChoice})
               </div>
 
@@ -303,8 +303,8 @@ export default function FolioPreviewCanvas({
               }}
               className={`group z-20 transition-all select-none rounded-lg ${
                 activeElement === 'operado'
-                  ? 'ring-2 ring-blue-600 ring-offset-2 shadow-xl'
-                  : 'hover:ring-1 hover:ring-blue-400'
+                  ? 'ring-2 ring-[#003399] ring-offset-2 shadow-xl'
+                  : 'hover:ring-1 hover:ring-[#003399]/40'
               }`}
             >
               {/* Tooltip de Coordenadas y Dimensiones Flotante */}

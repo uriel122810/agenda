@@ -10,9 +10,9 @@ export type FontChoice =
   | 'TimesRoman';
 
 export interface FolioConfig {
-  formatPreset: 'numeric' | '000000' | 'FOL-2026-000' | 'OFI-000/2026' | 'FOL-0000' | 'custom';
-  prefix: string;
-  suffix: string;
+  formatPreset?: string;
+  prefix?: string;
+  suffix?: string;
   startNumber: number;
   increment: number;
   padLength: number;
@@ -101,39 +101,14 @@ export function formatOfficialStampDate(isoDateStr: string): string {
 }
 
 /**
- * Generates formatted folio string based on index and configuration
+ * Generates formatted folio string based on index and configuration.
+ * Consists strictly of the consecutive number formatted with zero-padding (e.g. 136, 008, 000009).
+ * Prefixes and suffixes are completely eliminated.
  */
 export function generateFolioString(seqIndex: number, config: FolioConfig): string {
   const currentVal = config.startNumber + seqIndex * config.increment;
-  const padLength = Math.max(1, config.padLength || 3);
-  const numFormatted = String(Math.max(0, currentVal)).padStart(padLength, '0');
-
-  switch (config.formatPreset) {
-    case '000000': {
-      const pad = Math.max(6, config.padLength || 6);
-      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
-      return `${config.prefix || ''}${paddedNum}${config.suffix || ''}`;
-    }
-    case 'FOL-2026-000': {
-      const pad = Math.max(3, config.padLength || 3);
-      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
-      return `${config.prefix !== undefined && config.prefix !== '' ? config.prefix : 'FOL-2026-'}${paddedNum}${config.suffix || ''}`;
-    }
-    case 'OFI-000/2026': {
-      const pad = Math.max(3, config.padLength || 3);
-      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
-      return `${config.prefix !== undefined && config.prefix !== '' ? config.prefix : 'OFI-'}${paddedNum}${config.suffix !== undefined && config.suffix !== '' ? config.suffix : '/2026'}`;
-    }
-    case 'FOL-0000': {
-      const pad = Math.max(4, config.padLength || 4);
-      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
-      return `${config.prefix !== undefined && config.prefix !== '' ? config.prefix : 'FOL-'}${paddedNum}${config.suffix || ''}`;
-    }
-    case 'numeric':
-    case 'custom':
-    default:
-      return `${config.prefix || ''}${numFormatted}${config.suffix || ''}`;
-  }
+  const padLength = Math.max(1, config.padLength || 1);
+  return String(Math.max(0, currentVal)).padStart(padLength, '0');
 }
 
 /**

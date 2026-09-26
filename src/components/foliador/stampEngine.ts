@@ -1,10 +1,16 @@
 import { PDFDocument, rgb, degrees, StandardFonts, PDFPage } from 'pdf-lib';
 import { drawOfficialStampOnPdf, formatOfficialStampDate as formatOfficialStampDateFromStamp } from './OfficialStamp';
 
-export type FontChoice = 'Helvetica' | 'TimesRoman' | 'Courier';
+export type FontChoice =
+  | 'Helvetica'
+  | 'Helvetica-Bold'
+  | 'Times-Roman'
+  | 'Courier'
+  | 'Courier-Bold'
+  | 'TimesRoman';
 
 export interface FolioConfig {
-  formatPreset: '000000' | 'FOL-2026-000' | 'OFI-000/2026' | 'FOL-0000' | 'custom';
+  formatPreset: 'numeric' | '000000' | 'FOL-2026-000' | 'OFI-000/2026' | 'FOL-0000' | 'custom';
   prefix: string;
   suffix: string;
   startNumber: number;
@@ -16,8 +22,8 @@ export interface FolioConfig {
   colorHex: string;
   opacity: number; // 0 to 100
   style: 'boxed' | 'line' | 'text-only';
-  institutionHeader: string;
-  showMetadata: boolean; // date and page number
+  institutionHeader?: string;
+  showMetadata?: boolean; // date and page number
   // Placement
   positionMatrix: 'tl' | 'tc' | 'tr' | 'ml' | 'mc' | 'mr' | 'bl' | 'bc' | 'br' | 'free';
   normX: number; // 0 to 1
@@ -25,6 +31,11 @@ export interface FolioConfig {
   offsetX: number; // manual offset in points
   offsetY: number; // manual offset in points
   enabled: boolean;
+  // Replicación de Páginas Independiente
+  pageScope?: 'all' | 'first' | 'range' | 'custom';
+  rangeFrom?: number;
+  rangeTo?: number;
+  customPages?: string;
 }
 
 export interface OperadoStampConfig {
@@ -94,17 +105,31 @@ export function formatOfficialStampDate(isoDateStr: string): string {
  */
 export function generateFolioString(seqIndex: number, config: FolioConfig): string {
   const currentVal = config.startNumber + seqIndex * config.increment;
-  const numFormatted = String(Math.max(0, currentVal)).padStart(config.padLength, '0');
+  const padLength = Math.max(1, config.padLength || 3);
+  const numFormatted = String(Math.max(0, currentVal)).padStart(padLength, '0');
 
   switch (config.formatPreset) {
-    case '000000':
-      return String(Math.max(0, currentVal)).padStart(Math.max(6, config.padLength), '0');
-    case 'FOL-2026-000':
-      return `FOL-2026-${String(Math.max(0, currentVal)).padStart(Math.max(3, config.padLength), '0')}`;
-    case 'OFI-000/2026':
-      return `OFI-${String(Math.max(0, currentVal)).padStart(Math.max(3, config.padLength), '0')}/2026`;
-    case 'FOL-0000':
-      return `FOL-${String(Math.max(0, currentVal)).padStart(Math.max(4, config.padLength), '0')}`;
+    case '000000': {
+      const pad = Math.max(6, config.padLength || 6);
+      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
+      return `${config.prefix || ''}${paddedNum}${config.suffix || ''}`;
+    }
+    case 'FOL-2026-000': {
+      const pad = Math.max(3, config.padLength || 3);
+      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
+      return `${config.prefix !== undefined && config.prefix !== '' ? config.prefix : 'FOL-2026-'}${paddedNum}${config.suffix || ''}`;
+    }
+    case 'OFI-000/2026': {
+      const pad = Math.max(3, config.padLength || 3);
+      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
+      return `${config.prefix !== undefined && config.prefix !== '' ? config.prefix : 'OFI-'}${paddedNum}${config.suffix !== undefined && config.suffix !== '' ? config.suffix : '/2026'}`;
+    }
+    case 'FOL-0000': {
+      const pad = Math.max(4, config.padLength || 4);
+      const paddedNum = String(Math.max(0, currentVal)).padStart(pad, '0');
+      return `${config.prefix !== undefined && config.prefix !== '' ? config.prefix : 'FOL-'}${paddedNum}${config.suffix || ''}`;
+    }
+    case 'numeric':
     case 'custom':
     default:
       return `${config.prefix || ''}${numFormatted}${config.suffix || ''}`;
@@ -205,14 +230,22 @@ export function calculatePdfPlacement(
 /**
  * Selects standard font from pdf-lib
  */
-function getStandardFontName(fontChoice: FontChoice, isBold: boolean): StandardFonts {
-  if (fontChoice === 'Courier') {
-    return isBold ? StandardFonts.CourierBold : StandardFonts.Courier;
+export function getStandardFontName(fontChoice: FontChoice, isBold: boolean = false): StandardFonts {
+  switch (fontChoice) {
+    case 'Helvetica-Bold':
+      return StandardFonts.HelveticaBold;
+    case 'Helvetica':
+      return isBold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica;
+    case 'Times-Roman':
+    case 'TimesRoman':
+      return isBold ? StandardFonts.TimesRomanBold : StandardFonts.TimesRoman;
+    case 'Courier-Bold':
+      return StandardFonts.CourierBold;
+    case 'Courier':
+      return isBold ? StandardFonts.CourierBold : StandardFonts.Courier;
+    default:
+      return isBold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica;
   }
-  if (fontChoice === 'TimesRoman') {
-    return isBold ? StandardFonts.TimesRomanBold : StandardFonts.TimesRoman;
-  }
-  return isBold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica;
 }
 
 /**
@@ -229,7 +262,33 @@ export async function stampSinglePdf(
 ): Promise<{ modifiedBytes: Uint8Array; pageCount: number; pagesStamped: number }> {
   const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
   const totalPages = pdfDoc.getPageCount();
-  const targetIndices = resolveTargetPageIndices(totalPages, settings.pageRange);
+
+  // Resolve target indices for each element independently
+  const operadoIndices = settings.operado.enabled
+    ? resolveTargetPageIndices(totalPages, settings.pageRange)
+    : [];
+
+  const folioRangeConfig: PageRangeConfig = settings.folio.pageScope
+    ? {
+        mode: settings.folio.pageScope,
+        rangeFrom: settings.folio.rangeFrom || 1,
+        rangeTo: settings.folio.rangeTo || totalPages,
+        customPages: settings.folio.customPages || ''
+      }
+    : settings.pageRange;
+
+  const folioIndices = settings.folio.enabled
+    ? resolveTargetPageIndices(totalPages, folioRangeConfig)
+    : [];
+
+  const logoIndices = settings.logo.enabled
+    ? resolveTargetPageIndices(totalPages, settings.pageRange)
+    : [];
+
+  // Union of all target page indices
+  const allTargetIndices = Array.from(
+    new Set([...operadoIndices, ...folioIndices, ...logoIndices])
+  ).sort((a, b) => a - b);
 
   // Embed Fonts
   const folioFont = await pdfDoc.embedFont(getStandardFontName(settings.folio.fontChoice, settings.folio.isBold));
@@ -272,8 +331,8 @@ export async function stampSinglePdf(
 
   let pageCounter = 0;
 
-  for (let t = 0; t < targetIndices.length; t++) {
-    const pageIdx = targetIndices[t];
+  for (let t = 0; t < allTargetIndices.length; t++) {
+    const pageIdx = allTargetIndices[t];
     const page = pdfDoc.getPage(pageIdx);
     const { width: pageW, height: pageH } = page.getSize();
     const pageNumber = pageIdx + 1;
@@ -283,8 +342,12 @@ export async function stampSinglePdf(
       ? initialGlobalPageIndex + pageCounter
       : docIndex;
 
+    const shouldStampOperado = settings.operado.enabled && operadoIndices.includes(pageIdx);
+    const shouldStampLogo = settings.logo.enabled && logoIndices.includes(pageIdx);
+    const shouldStampFolio = settings.folio.enabled && folioIndices.includes(pageIdx);
+
     // ── 1. ESTAMPAR SELLO OFICIAL DE TRES NIVELES ("OPERADO") ─────────────
-    if (settings.operado.enabled) {
+    if (shouldStampOperado) {
       const stampW = settings.operado.width || 210;
       const stampH = settings.operado.height || 105;
       const { x: stampX, y: stampY } = calculatePdfPlacement(
@@ -320,7 +383,7 @@ export async function stampSinglePdf(
     }
 
     // ── 2. ESTAMPAR LOGOTIPO / IMAGEN PERSONALIZADA ─────────────────────────
-    if (settings.logo.enabled && embeddedImage) {
+    if (shouldStampLogo && embeddedImage) {
       const logoW = settings.logo.width || 60;
       const logoH = settings.logo.height || 60;
       const { x: logoX, y: logoY } = calculatePdfPlacement(
@@ -344,106 +407,135 @@ export async function stampSinglePdf(
       });
     }
 
-    // ── 3. ESTAMPAR FOLIO DE TEXTO / NUMERACIÓN ──────────────────────────────
-    if (settings.folio.enabled) {
+    // ── 3. ESTAMPAR FOLIO NUMÉRICO / TEXTO ────────────────────────────────────
+    if (shouldStampFolio) {
+      const folioFont = await pdfDoc.embedFont(getStandardFontName(settings.folio.fontChoice, settings.folio.isBold));
+      const folioFontRegular = await pdfDoc.embedFont(getStandardFontName(settings.folio.fontChoice, false));
       const folioStr = generateFolioString(seqIndex, settings.folio);
-      const fontSize = settings.folio.fontSize || 10;
-      const titleText = `FOLIO: ${folioStr}`;
-      const headerText = (settings.folio.institutionHeader || 'PAZSUMA • FOLIO OFICIAL').slice(0, 36);
-      const metaText = `FECHA: ${new Date().toLocaleDateString('es-MX')} • PÁG. ${pageNumber}/${totalPages}`;
+      const fontSize = settings.folio.fontSize || 14;
+      const isSimpleTextOnly = settings.folio.style === 'text-only' && !settings.folio.showMetadata;
 
-      // Calculate approximate box size
-      const maxTextW = Math.max(
-        folioFont.widthOfTextAtSize(titleText, fontSize + 1),
-        folioFontRegular.widthOfTextAtSize(headerText, fontSize - 2),
-        folioFontRegular.widthOfTextAtSize(metaText, fontSize - 3)
-      );
+      if (isSimpleTextOnly) {
+        // Modo Folio Numérico Simple: Texto limpio y vectorizado directamente en coordenadas seleccionadas
+        const textW = folioFont.widthOfTextAtSize(folioStr, fontSize);
+        const textH = fontSize;
 
-      const boxW = Math.max(160, maxTextW + 24);
-      const boxH = settings.folio.showMetadata ? 52 : 36;
+        const { x: fX, y: fY } = calculatePdfPlacement(
+          settings.folio.normX,
+          settings.folio.normY,
+          textW,
+          textH,
+          pageW,
+          pageH,
+          settings.folio.offsetX,
+          settings.folio.offsetY
+        );
 
-      const { x: fX, y: fY } = calculatePdfPlacement(
-        settings.folio.normX,
-        settings.folio.normY,
-        boxW,
-        boxH,
-        pageW,
-        pageH,
-        settings.folio.offsetX,
-        settings.folio.offsetY
-      );
-
-      if (settings.folio.style === 'boxed') {
-        page.drawRectangle({
+        page.drawText(folioStr, {
           x: fX,
-          y: fY,
-          width: boxW,
-          height: boxH,
-          color: rgb(0.99, 0.99, 0.99),
-          opacity: folioAlpha * 0.85,
-          borderColor: folioColor,
-          borderWidth: 1.2,
-          borderOpacity: folioAlpha
-        });
-      } else if (settings.folio.style === 'line') {
-        page.drawLine({
-          start: { x: fX, y: fY + boxH },
-          end: { x: fX + boxW, y: fY + boxH },
-          thickness: 1.5,
-          color: folioColor,
-          opacity: folioAlpha
-        });
-        page.drawLine({
-          start: { x: fX, y: fY },
-          end: { x: fX + boxW, y: fY },
-          thickness: 0.75,
-          color: folioColor,
-          opacity: folioAlpha * 0.7
-        });
-      }
-
-      const textLeft = fX + 8;
-
-      if (settings.folio.showMetadata) {
-        // Encabezado
-        page.drawText(headerText, {
-          x: textLeft,
-          y: fY + boxH - 12,
-          size: Math.max(6, fontSize - 3),
-          font: helveticaBold,
-          color: folioColor,
-          opacity: folioAlpha * 0.85
-        });
-
-        // Folio destacado
-        page.drawText(titleText, {
-          x: textLeft,
-          y: fY + boxH - 26,
-          size: fontSize + 1,
+          y: Math.max(4, Math.min(pageH - fontSize - 4, fY)),
+          size: fontSize,
           font: folioFont,
           color: folioColor,
           opacity: folioAlpha
-        });
-
-        // Metadatos
-        page.drawText(metaText, {
-          x: textLeft,
-          y: fY + 6,
-          size: Math.max(6, fontSize - 3.5),
-          font: folioFontRegular,
-          color: folioColor,
-          opacity: folioAlpha * 0.75
         });
       } else {
-        // Solo el Folio centrado en la caja
-        page.drawText(titleText, {
-          x: textLeft,
-          y: fY + (boxH - fontSize) / 2,
-          size: fontSize + 2,
-          font: folioFont,
-          color: folioColor,
-          opacity: folioAlpha
-        });
+        // Modo Enmarcado o con Metadatos
+        const headerText = (settings.folio.institutionHeader || 'PAZSUMA • FOLIO OFICIAL').slice(0, 36);
+        const metaText = `FECHA: ${new Date().toLocaleDateString('es-MX')} • PÁG. ${pageNumber}/${totalPages}`;
+
+        const maxTextW = Math.max(
+          folioFont.widthOfTextAtSize(folioStr, fontSize),
+          settings.folio.showMetadata ? folioFontRegular.widthOfTextAtSize(headerText, Math.max(6, fontSize - 4)) : 0,
+          settings.folio.showMetadata ? folioFontRegular.widthOfTextAtSize(metaText, Math.max(6, fontSize - 5)) : 0
+        );
+
+        const boxW = Math.max(80, maxTextW + 18);
+        const boxH = settings.folio.showMetadata ? Math.max(48, fontSize * 2.8) : Math.max(26, fontSize + 12);
+
+        const { x: fX, y: fY } = calculatePdfPlacement(
+          settings.folio.normX,
+          settings.folio.normY,
+          boxW,
+          boxH,
+          pageW,
+          pageH,
+          settings.folio.offsetX,
+          settings.folio.offsetY
+        );
+
+        if (settings.folio.style === 'boxed') {
+          page.drawRectangle({
+            x: fX,
+            y: fY,
+            width: boxW,
+            height: boxH,
+            color: rgb(0.99, 0.99, 0.99),
+            opacity: folioAlpha * 0.85,
+            borderColor: folioColor,
+            borderWidth: 1.2,
+            borderOpacity: folioAlpha
+          });
+        } else if (settings.folio.style === 'line') {
+          page.drawLine({
+            start: { x: fX, y: fY + boxH },
+            end: { x: fX + boxW, y: fY + boxH },
+            thickness: 1.5,
+            color: folioColor,
+            opacity: folioAlpha
+          });
+          page.drawLine({
+            start: { x: fX, y: fY },
+            end: { x: fX + boxW, y: fY },
+            thickness: 0.75,
+            color: folioColor,
+            opacity: folioAlpha * 0.7
+          });
+        }
+
+        const textLeft = fX + 9;
+
+        if (settings.folio.showMetadata) {
+          // Encabezado
+          page.drawText(headerText, {
+            x: textLeft,
+            y: fY + boxH - 12,
+            size: Math.max(6, fontSize - 4),
+            font: helveticaBold,
+            color: folioColor,
+            opacity: folioAlpha * 0.85
+          });
+
+          // Folio destacado
+          page.drawText(folioStr, {
+            x: textLeft,
+            y: fY + boxH - 26,
+            size: fontSize,
+            font: folioFont,
+            color: folioColor,
+            opacity: folioAlpha
+          });
+
+          // Metadatos
+          page.drawText(metaText, {
+            x: textLeft,
+            y: fY + 6,
+            size: Math.max(6, fontSize - 5),
+            font: folioFontRegular,
+            color: folioColor,
+            opacity: folioAlpha * 0.75
+          });
+        } else {
+          // Solo el Folio centrado en la caja
+          page.drawText(folioStr, {
+            x: textLeft,
+            y: fY + (boxH - fontSize) / 2,
+            size: fontSize,
+            font: folioFont,
+            color: folioColor,
+            opacity: folioAlpha
+          });
+        }
       }
     }
 

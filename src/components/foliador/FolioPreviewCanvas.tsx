@@ -88,14 +88,19 @@ export default function FolioPreviewCanvas({
     const rawY = e.clientY - rect.top - dragOffset.y;
 
     // Approximate element sizes inside preview container
-    let elemW = 160;
-    let elemH = 50;
+    let elemW = 120;
+    let elemH = 40;
     if (draggingTarget === 'operado') {
       elemW = (operadoConfig.width || 210) * 0.78;
       elemH = (operadoConfig.height || 105) * 0.78;
     } else if (draggingTarget === 'logo') {
       elemW = (logoConfig.width || 60) * 0.9;
       elemH = (logoConfig.height || 60) * 0.9;
+    } else if (draggingTarget === 'folio') {
+      const isSimple = folioConfig.style === 'text-only' && !folioConfig.showMetadata;
+      const fSize = folioConfig.fontSize || 14;
+      elemW = isSimple ? Math.max(50, previewFolioStr.length * fSize * 0.65) : 150;
+      elemH = isSimple ? Math.max(22, fSize * 1.4) : 48;
     }
 
     const maxX = Math.max(1, rect.width - elemW);
@@ -218,7 +223,7 @@ export default function FolioPreviewCanvas({
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
-          {/* 1. ELEMENTO ARRASTRABLE: FOLIO DE TEXTO                             */}
+          {/* 1. ELEMENTO ARRASTRABLE: FOLIO NUMÉRICO SIMPLE / CONFIGURABLE       */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {folioConfig.enabled && (
             <div
@@ -228,51 +233,53 @@ export default function FolioPreviewCanvas({
                 position: 'absolute',
                 left: `calc(${folioConfig.normX * 100}% + ${folioConfig.offsetX * 0.4}px)`,
                 top: `calc(${folioConfig.normY * 100}% + ${folioConfig.offsetY * 0.4}px)`,
-                transform: 'translate(-50%, -50%)',
+                transform: `translate(-${folioConfig.normX * 100}%, -${folioConfig.normY * 100}%)`,
                 opacity: folioConfig.opacity / 100,
                 cursor: draggingTarget === 'folio' ? 'grabbing' : 'grab'
               }}
-              className={`group z-20 transition-shadow select-none rounded-lg p-2 ${
+              className={`group z-25 transition-all select-none rounded-md ${
                 activeElement === 'folio'
-                  ? 'ring-2 ring-[#581c2f] ring-offset-1 shadow-md'
+                  ? 'ring-2 ring-blue-600 ring-offset-2 shadow-lg'
                   : 'hover:ring-1 hover:ring-slate-400'
               } ${
                 folioConfig.style === 'boxed'
-                  ? 'bg-white/95 border-2 shadow-xs'
+                  ? 'bg-white/95 border-2 shadow-xs p-2'
                   : folioConfig.style === 'line'
-                  ? 'border-y-2 bg-white/70'
-                  : 'bg-transparent'
+                  ? 'border-y-2 bg-white/70 p-2'
+                  : 'bg-white/40 hover:bg-white/80 border border-dashed border-slate-300 hover:border-blue-400 p-1.5'
               }`}
             >
               {/* Tooltip de Coordenadas Flotante durante arrastre o selección */}
-              <div className="hidden group-hover:flex absolute -top-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-xs">
-                Folio • X: {Math.round(folioConfig.normX * 100)}% Y: {Math.round(folioConfig.normY * 100)}%
+              <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-2 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
+                Folio Numérico • X: {Math.round(folioConfig.normX * 100)}% Y: {Math.round(folioConfig.normY * 100)}% ({folioConfig.fontSize}pt • {folioConfig.fontChoice})
               </div>
 
               <div
                 style={{
                   color: folioConfig.colorHex,
-                  fontFamily: folioConfig.fontChoice === 'Courier'
-                    ? 'monospace'
-                    : folioConfig.fontChoice === 'TimesRoman'
-                    ? 'serif'
-                    : 'sans-serif',
-                  fontWeight: folioConfig.isBold ? 700 : 500,
-                  fontSize: `${Math.max(8, folioConfig.fontSize * 0.85)}px`,
+                  fontFamily: folioConfig.fontChoice?.includes('Courier')
+                    ? '"Courier New", Courier, monospace'
+                    : (folioConfig.fontChoice?.includes('Times') || folioConfig.fontChoice === 'TimesRoman')
+                    ? '"Times New Roman", Times, Georgia, serif'
+                    : 'Helvetica, Arial, -apple-system, sans-serif',
+                  fontWeight: (folioConfig.fontChoice?.includes('Bold') || folioConfig.isBold) ? 700 : 400,
+                  fontSize: `${Math.max(10, folioConfig.fontSize * 0.9)}px`,
                   borderColor: folioConfig.colorHex
                 }}
-                className="flex flex-col min-w-[120px] max-w-[210px]"
+                className={`flex flex-col whitespace-nowrap leading-none ${
+                  folioConfig.showMetadata ? 'min-w-[120px] max-w-[210px]' : ''
+                }`}
               >
                 {folioConfig.showMetadata && (
-                  <span className="text-[7px] font-bold tracking-tight opacity-80 uppercase truncate">
+                  <span className="text-[7px] font-bold tracking-tight opacity-80 uppercase truncate mb-1">
                     {folioConfig.institutionHeader || 'PAZSUMA • FOLIO OFICIAL'}
                   </span>
                 )}
                 <span className="tracking-wider">
-                  FOLIO: {previewFolioStr}
+                  {previewFolioStr}
                 </span>
                 {folioConfig.showMetadata && (
-                  <span className="text-[6.5px] opacity-70">
+                  <span className="text-[6.5px] opacity-70 mt-1">
                     FECHA: {new Date().toLocaleDateString('es-MX')} • PÁG. 1/{totalPages}
                   </span>
                 )}
@@ -291,7 +298,7 @@ export default function FolioPreviewCanvas({
                 position: 'absolute',
                 left: `calc(${operadoConfig.normX * 100}% + ${operadoConfig.offsetX * 0.4}px)`,
                 top: `calc(${operadoConfig.normY * 100}% + ${operadoConfig.offsetY * 0.4}px)`,
-                transform: 'translate(-50%, -50%)',
+                transform: `translate(-${operadoConfig.normX * 100}%, -${operadoConfig.normY * 100}%)`,
                 cursor: draggingTarget === 'operado' ? 'grabbing' : 'grab'
               }}
               className={`group z-20 transition-all select-none rounded-lg ${
@@ -340,7 +347,7 @@ export default function FolioPreviewCanvas({
                 position: 'absolute',
                 left: `calc(${logoConfig.normX * 100}% + ${logoConfig.offsetX * 0.4}px)`,
                 top: `calc(${logoConfig.normY * 100}% + ${logoConfig.offsetY * 0.4}px)`,
-                transform: `translate(-50%, -50%) rotate(${logoConfig.rotationAngle || 0}deg)`,
+                transform: `translate(-${logoConfig.normX * 100}%, -${logoConfig.normY * 100}%) rotate(${logoConfig.rotationAngle || 0}deg)`,
                 width: `${(logoConfig.width || 60) * 0.8}px`,
                 height: `${(logoConfig.height || 60) * 0.8}px`,
                 opacity: logoConfig.opacity / 100,

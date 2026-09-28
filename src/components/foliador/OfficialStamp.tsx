@@ -21,6 +21,7 @@ export interface OfficialStampProps {
   className?: string;
   style?: React.CSSProperties;
   showTexture?: boolean;
+  showBorder?: boolean;
 }
 
 export interface OfficialStampRenderOptions {
@@ -37,6 +38,7 @@ export interface OfficialStampRenderOptions {
   shieldImageUrl?: string | null;
   shieldImageBytes?: ArrayBuffer | null;
   scale?: number; // for high DPI canvas rendering
+  showBorder?: boolean;
 }
 
 export interface DrawOfficialStampPdfOptions extends OfficialStampRenderOptions {
@@ -234,7 +236,8 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     opacity = 0.88,
     width = 210,
     height = 105,
-    shieldImageUrl = null
+    shieldImageUrl = null,
+    showBorder = true
   } = options;
 
   const normalizedOpacity = opacity > 1 ? opacity / 100 : opacity;
@@ -279,11 +282,13 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
   </defs>
 
   <g filter="url(#ink-bleed-filter)">
+    ${showBorder ? `
     <!-- Borde exterior de goma -->
     <rect x="2.5" y="2.5" width="205" height="100" rx="5.5" ry="5.5" stroke="${inkBlue}" stroke-width="2.6" fill="none" />
     
     <!-- Filete interior de sello oficial -->
     <rect x="5.5" y="5.5" width="199" height="94" rx="3.5" ry="3.5" stroke="${inkBlue}" stroke-width="0.9" stroke-opacity="0.85" fill="none" />
+    ` : ''}
 
     <!-- ── NIVEL 1: OPERADO (Texto Azul) ── -->
     <text
@@ -377,7 +382,8 @@ export async function renderOfficialStampToCanvas(
     width = 210,
     height = 105,
     shieldImageUrl = null,
-    scale = 3 // 3x for 300 DPI high-res crispness
+    scale = 3, // 3x for 300 DPI high-res crispness
+    showBorder = true
   } = options;
 
   const ctx = canvas.getContext('2d');
@@ -399,18 +405,20 @@ export async function renderOfficialStampToCanvas(
   const sx = w / 210;
   const sy = h / 105;
 
-  // Draw outer rounded rectangle
-  ctx.strokeStyle = inkBlue;
-  ctx.lineWidth = 2.6 * ((sx + sy) / 2);
-  roundRect(ctx, 2.5 * sx, 2.5 * sy, (205) * sx, (100) * sy, 5.5 * sx);
-  ctx.stroke();
+  if (showBorder) {
+    // Draw outer rounded rectangle
+    ctx.strokeStyle = inkBlue;
+    ctx.lineWidth = 2.6 * ((sx + sy) / 2);
+    roundRect(ctx, 2.5 * sx, 2.5 * sy, (205) * sx, (100) * sy, 5.5 * sx);
+    ctx.stroke();
 
-  // Draw inner thin border
-  ctx.lineWidth = 0.9 * ((sx + sy) / 2);
-  ctx.globalAlpha = normalizedOpacity * 0.85;
-  roundRect(ctx, 5.5 * sx, 5.5 * sy, (199) * sx, (94) * sy, 3.5 * sx);
-  ctx.stroke();
-  ctx.globalAlpha = normalizedOpacity;
+    // Draw inner thin border
+    ctx.lineWidth = 0.9 * ((sx + sy) / 2);
+    ctx.globalAlpha = normalizedOpacity * 0.85;
+    roundRect(ctx, 5.5 * sx, 5.5 * sy, (199) * sx, (94) * sy, 3.5 * sx);
+    ctx.stroke();
+    ctx.globalAlpha = normalizedOpacity;
+  }
 
   // ── NIVEL 1: OPERADO ──
   ctx.fillStyle = inkBlue;
@@ -701,7 +709,8 @@ export async function drawOfficialStampOnPdf(
     institutionLine1 = 'H. AYUNTAMIENTO',
     institutionLine2 = 'DE LA PAZ',
     institutionLine3 = '2024 - 2027',
-    shieldImageBytes = null
+    shieldImageBytes = null,
+    showBorder = true
   } = options;
 
   const normalizedOpacity = opacity > 1 ? opacity / 100 : opacity;
@@ -710,6 +719,7 @@ export async function drawOfficialStampOnPdf(
   try {
     const pngBytes = await generateOfficialStampPngBytes({
       ...options,
+      showBorder,
       opacity: 1 // Keep PNG crisp, pdf-lib applies target opacity on placement
     });
 
@@ -738,30 +748,32 @@ export async function drawOfficialStampOnPdf(
   const courierBold = await pdfDoc.embedFont('Courier-Bold');
   const helveticaRegular = await pdfDoc.embedFont('Helvetica');
 
-  // Outer border
-  page.drawRectangle({
-    x,
-    y,
-    width,
-    height,
-    borderWidth: 2.4,
-    borderColor: pdfBlue,
-    borderOpacity: normalizedOpacity,
-    color: rgb(1, 1, 1),
-    opacity: 0.05 // Non-blocking, text underneath remains visible
-  });
+  if (showBorder) {
+    // Outer border
+    page.drawRectangle({
+      x,
+      y,
+      width,
+      height,
+      borderWidth: 2.4,
+      borderColor: pdfBlue,
+      borderOpacity: normalizedOpacity,
+      color: rgb(1, 1, 1),
+      opacity: 0.05 // Non-blocking, text underneath remains visible
+    });
 
-  // Inner border
-  const inset = 3.5;
-  page.drawRectangle({
-    x: x + inset,
-    y: y + inset,
-    width: width - inset * 2,
-    height: height - inset * 2,
-    borderWidth: 0.8,
-    borderColor: pdfBlue,
-    borderOpacity: normalizedOpacity * 0.85
-  });
+    // Inner border
+    const inset = 3.5;
+    page.drawRectangle({
+      x: x + inset,
+      y: y + inset,
+      width: width - inset * 2,
+      height: height - inset * 2,
+      borderWidth: 0.8,
+      borderColor: pdfBlue,
+      borderOpacity: normalizedOpacity * 0.85
+    });
+  }
 
   // ── NIVEL 1: OPERADO ──
   const operadoFontSize = 18 * (height / 105);
@@ -911,7 +923,8 @@ export default function OfficialStamp({
   onResize,
   className = '',
   style = {},
-  showTexture = true
+  showTexture = true,
+  showBorder = true
 }: OfficialStampProps) {
   const filterId = useId();
   const formattedDate = formatOfficialStampDate(date);
@@ -983,44 +996,48 @@ export default function OfficialStamp({
         </defs>
 
         <g filter={showTexture ? `url(#ink-bleed-${filterId})` : undefined}>
-          {/* Fondo sutil semi-translúcido para emular base de tinta */}
-          <rect
-            x="2.5"
-            y="2.5"
-            width="205"
-            height="100"
-            rx="5.5"
-            ry="5.5"
-            fill="#ffffff"
-            fillOpacity="0.08"
-          />
+          {showBorder && (
+            <>
+              {/* Fondo sutil semi-translúcido para emular base de tinta */}
+              <rect
+                x="2.5"
+                y="2.5"
+                width="205"
+                height="100"
+                rx="5.5"
+                ry="5.5"
+                fill="#ffffff"
+                fillOpacity="0.08"
+              />
 
-          {/* Borde exterior de sello de caucho */}
-          <rect
-            x="2.5"
-            y="2.5"
-            width="205"
-            height="100"
-            rx="5.5"
-            ry="5.5"
-            stroke={inkBlue}
-            strokeWidth="2.6"
-            fill="none"
-          />
+              {/* Borde exterior de sello de caucho */}
+              <rect
+                x="2.5"
+                y="2.5"
+                width="205"
+                height="100"
+                rx="5.5"
+                ry="5.5"
+                stroke={inkBlue}
+                strokeWidth="2.6"
+                fill="none"
+              />
 
-          {/* Filete interior fino */}
-          <rect
-            x="5.5"
-            y="5.5"
-            width="199"
-            height="94"
-            rx="3.5"
-            ry="3.5"
-            stroke={inkBlue}
-            strokeWidth="0.9"
-            strokeOpacity="0.85"
-            fill="none"
-          />
+              {/* Filete interior fino */}
+              <rect
+                x="5.5"
+                y="5.5"
+                width="199"
+                height="94"
+                rx="3.5"
+                ry="3.5"
+                stroke={inkBlue}
+                strokeWidth="0.9"
+                strokeOpacity="0.85"
+                fill="none"
+              />
+            </>
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* 1. PARTE SUPERIOR (Texto Azul: OPERADO)                              */}

@@ -97,7 +97,8 @@ export default function FolioPreviewCanvas({
       elemW = (logoConfig.width || 60) * 0.9;
       elemH = (logoConfig.height || 60) * 0.9;
     } else if (draggingTarget === 'folio') {
-      const isSimple = folioConfig.style === 'text-only' && !folioConfig.showMetadata;
+      const isBoxed = folioConfig.showBorder ?? (folioConfig.style === 'boxed');
+      const isSimple = !isBoxed && !folioConfig.showMetadata;
       const fSize = folioConfig.fontSize || 14;
       elemW = isSimple ? Math.max(50, previewFolioStr.length * fSize * 0.65) : 150;
       elemH = isSimple ? Math.max(22, fSize * 1.4) : 48;
@@ -225,7 +226,9 @@ export default function FolioPreviewCanvas({
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* 1. ELEMENTO ARRASTRABLE: FOLIO NUMÉRICO SIMPLE / CONFIGURABLE       */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
-          {folioConfig.enabled && (
+          {folioConfig.enabled && (() => {
+            const isBoxed = folioConfig.showBorder ?? (folioConfig.style === 'boxed');
+            return (
             <div
               onPointerDown={e => handlePointerDown(e, 'folio', folioConfig.normX, folioConfig.normY)}
               onClick={() => onSelectElement('folio')}
@@ -235,23 +238,24 @@ export default function FolioPreviewCanvas({
                 top: `calc(${folioConfig.normY * 100}% + ${folioConfig.offsetY * 0.4}px)`,
                 transform: `translate(-${folioConfig.normX * 100}%, -${folioConfig.normY * 100}%)`,
                 opacity: folioConfig.opacity / 100,
-                cursor: draggingTarget === 'folio' ? 'grabbing' : 'grab'
+                cursor: draggingTarget === 'folio' ? 'grabbing' : 'grab',
+                borderColor: isBoxed ? folioConfig.colorHex : undefined
               }}
-              className={`group z-25 transition-all select-none rounded-md ${
+              className={`group z-25 transition-all select-none rounded-sm ${
                 activeElement === 'folio'
                   ? 'ring-2 ring-[#581c2f] ring-offset-2 shadow-lg'
                   : 'hover:ring-1 hover:ring-slate-400'
               } ${
-                folioConfig.style === 'boxed'
-                  ? 'bg-white/95 border-2 shadow-xs p-2'
+                isBoxed
+                  ? 'bg-white/95 border border-solid shadow-xs px-2.5 py-1.5'
                   : folioConfig.style === 'line'
-                  ? 'border-y-2 bg-white/70 p-2'
-                  : 'bg-white/40 hover:bg-white/80 border border-dashed border-slate-300 hover:border-[#581c2f] p-1.5'
+                  ? 'border-y-2 bg-white/70 px-2 py-1'
+                  : 'bg-transparent hover:bg-white/40 border border-transparent hover:border-dashed hover:border-slate-300 p-1'
               }`}
             >
               {/* Tooltip de Coordenadas Flotante durante arrastre o selección */}
               <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-[#581c2f] text-white text-[8px] px-2 py-0.5 rounded-md font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
-                Folio Numérico • X: {Math.round(folioConfig.normX * 100)}% Y: {Math.round(folioConfig.normY * 100)}% ({folioConfig.fontSize}pt • {folioConfig.fontChoice})
+                Folio Numérico {isBoxed ? '(Con Marco)' : '(Puro sin Marco)'} • X: {Math.round(folioConfig.normX * 100)}% Y: {Math.round(folioConfig.normY * 100)}% ({folioConfig.fontSize}pt • {folioConfig.fontChoice})
               </div>
 
               <div
@@ -285,7 +289,8 @@ export default function FolioPreviewCanvas({
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* 2. ELEMENTO ARRASTRABLE: SELLO OFICIAL DE TRES NIVELES ("OPERADO")   */}
@@ -309,7 +314,7 @@ export default function FolioPreviewCanvas({
             >
               {/* Tooltip de Coordenadas y Dimensiones Flotante */}
               <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-2 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
-                Sello Oficial 3 Niveles • X: {Math.round(operadoConfig.normX * 100)}% Y: {Math.round(operadoConfig.normY * 100)}% ({operadoConfig.width || 210}×{operadoConfig.height || 105} pt)
+                Sello Oficial 3 Niveles {operadoConfig.showBorder !== false ? '(Con Marco)' : '(Sin Marco)'} • X: {Math.round(operadoConfig.normX * 100)}% Y: {Math.round(operadoConfig.normY * 100)}% ({operadoConfig.width || 210}×{operadoConfig.height || 105} pt)
               </div>
 
               {/* Sello Oficial de Tres Niveles: OPERADO (Azul) + Fecha (Rojo) + H. Ayuntamiento (Azul) */}
@@ -325,6 +330,7 @@ export default function FolioPreviewCanvas({
                 width={(operadoConfig.width || 210) * 0.78}
                 height={(operadoConfig.height || 105) * 0.78}
                 shieldImageUrl={operadoConfig.shieldImageUrl || null}
+                showBorder={operadoConfig.showBorder !== false}
                 isSelected={activeElement === 'operado'}
                 isInteractive={true}
                 onResize={(newW, newH) => {
@@ -379,12 +385,16 @@ export default function FolioPreviewCanvas({
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-[#581c2f]" />
-            <span>Folio: {folioConfig.enabled ? 'Activo' : 'Oculto'}</span>
+            <span>
+              Folio: {folioConfig.enabled ? ((folioConfig.showBorder ?? (folioConfig.style === 'boxed')) ? 'Activo (Con Marco)' : 'Activo (Sin Marco)') : 'Oculto'}
+            </span>
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-[#003399]" />
-            <span>Sello Oficial 3 Niveles: {operadoConfig.enabled ? 'Activo (#003399 • #E62B4A)' : 'Oculto'}</span>
+            <span>
+              Sello Oficial 3 Niveles: {operadoConfig.enabled ? (operadoConfig.showBorder !== false ? 'Activo (Con Marco)' : 'Activo (Sin Marco)') : 'Oculto'}
+            </span>
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">

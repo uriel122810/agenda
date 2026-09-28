@@ -7,7 +7,7 @@ import {
   FileText, ShieldCheck, CheckCircle2, AlertCircle, X, Trash2,
   Layers, FileCheck, Archive, Hash, FolderDown, Plus, Info,
   ChevronRight, ArrowRight, ExternalLink, RotateCw, Type,
-  Bold, Lock, Unlock, Grid
+  Bold, Lock, Unlock, Grid, Square
 } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
@@ -108,6 +108,7 @@ export default function FolioVisualEditor({
     colorHex: '#111827',
     opacity: 100,
     style: 'text-only',
+    showBorder: false,
     institutionHeader: 'PAZSUMA • GESTIÓN INSTITUCIONAL',
     showMetadata: false,
     positionMatrix: 'tr',
@@ -124,6 +125,7 @@ export default function FolioVisualEditor({
   // ── 2. CONFIGURACIÓN DEL SELLO OFICIAL "OPERADO" DE TRES NIVELES ─────────
   const [operadoConfig, setOperadoConfig] = useState<OperadoStampConfig>({
     enabled: true,
+    showBorder: true,
     operadoWord: 'OPERADO',
     institutionLine1: 'H. AYUNTAMIENTO',
     institutionLine2: 'DE LA PAZ',
@@ -1009,6 +1011,54 @@ export default function FolioVisualEditor({
                 </div>
               </div>
 
+              {/* Opción para Mostrar / Quitar Marco en Número de Folio (Border Toggle) */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#fbf0f3]/60 border border-[#eed7dc] transition">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-[#581c2f]/10 text-[#581c2f] flex items-center justify-center shrink-0">
+                    <Square className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Mostrar Marco en Número de Folio
+                      </span>
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider transition ${
+                          folioConfig.showBorder
+                            ? 'bg-[#581c2f] text-white shadow-2xs'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {folioConfig.showBorder ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      {folioConfig.showBorder
+                        ? 'Dibuja un recuadro limpio con borde delgado alrededor del número'
+                        : 'Imprime únicamente el número puro (ej. 136, 008) sobre el papel sin ningún recuadro'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch Toggle */}
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(folioConfig.showBorder)}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setFolioConfig({
+                        ...folioConfig,
+                        showBorder: checked,
+                        style: checked ? 'boxed' : (folioConfig.style === 'line' ? 'line' : 'text-only')
+                      });
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#581c2f]"></div>
+                </label>
+              </div>
+
               {/* Estilo Visual de Presentación del Folio */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1.5">
@@ -1019,21 +1069,34 @@ export default function FolioVisualEditor({
                     { id: 'text-only', label: 'Texto Limpio / Simple', desc: 'Directo sin recuadro' },
                     { id: 'boxed', label: 'Enmarcado', desc: 'Recuadro sutil blanco' },
                     { id: 'line', label: 'Líneas Notariales', desc: 'Bordes sup. e inf.' }
-                  ].map(st => (
-                    <button
-                      key={st.id}
-                      type="button"
-                      onClick={() => setFolioConfig({ ...folioConfig, style: st.id as any })}
-                      className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                        folioConfig.style === st.id
-                          ? 'border-[#581c2f] bg-[#fbf0f3] text-[#581c2f] font-bold shadow-2xs'
-                          : 'border-[#eed7dc] bg-white text-slate-700 hover:bg-[#fbf0f3] text-xs font-semibold'
-                      }`}
-                    >
-                      <span className="block text-xs">{st.label}</span>
-                      <span className="block text-[9px] opacity-75">{st.desc}</span>
-                    </button>
-                  ))}
+                  ].map(st => {
+                    const isSelected = st.id === 'boxed'
+                      ? folioConfig.showBorder
+                      : st.id === 'text-only'
+                      ? (!folioConfig.showBorder && folioConfig.style !== 'line')
+                      : (folioConfig.style === 'line');
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() =>
+                          setFolioConfig({
+                            ...folioConfig,
+                            style: st.id as any,
+                            showBorder: st.id === 'boxed'
+                          })
+                        }
+                        className={`p-2 rounded-xl border text-center transition cursor-pointer ${
+                          isSelected
+                            ? 'border-[#581c2f] bg-[#fbf0f3] text-[#581c2f] font-bold shadow-2xs ring-1 ring-[#581c2f]'
+                            : 'border-[#eed7dc] bg-white text-slate-700 hover:bg-[#fbf0f3] text-xs font-semibold'
+                        }`}
+                      >
+                        <span className="block text-xs">{st.label}</span>
+                        <span className="block text-[9px] opacity-75">{st.desc}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="mt-2.5 flex items-center justify-between p-2.5 rounded-xl bg-[#fbf0f3]/30 border border-[#eed7dc]">
@@ -1184,6 +1247,52 @@ export default function FolioVisualEditor({
                     className="accent-[#003399] h-4 w-4 rounded"
                   />
                   <span>Activar Sello</span>
+                </label>
+              </div>
+
+              {/* Opción para Mostrar / Quitar Marco en Sello Operado (Border Toggle) */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/60 border border-blue-200 transition">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-[#003399]/10 text-[#003399] flex items-center justify-center shrink-0">
+                    <Square className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Mostrar Marco en Sello Operado
+                      </span>
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider transition ${
+                          operadoConfig.showBorder !== false
+                            ? 'bg-[#003399] text-white shadow-2xs'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {operadoConfig.showBorder !== false ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      {operadoConfig.showBorder !== false
+                        ? 'Dibuja el recuadro delimitador con el estilo de borde de sello físico'
+                        : 'Renderiza limpio únicamente texto "OPERADO", fecha roja y logotipo, sin marco exterior'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch Toggle */}
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={operadoConfig.showBorder !== false}
+                    onChange={e =>
+                      setOperadoConfig({
+                        ...operadoConfig,
+                        showBorder: e.target.checked
+                      })
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#003399]"></div>
                 </label>
               </div>
 

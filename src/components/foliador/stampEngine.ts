@@ -22,6 +22,7 @@ export interface FolioConfig {
   colorHex: string;
   opacity: number; // 0 to 100
   style: 'boxed' | 'line' | 'text-only';
+  showBorder?: boolean;
   institutionHeader?: string;
   showMetadata?: boolean; // date and page number
   // Placement
@@ -40,6 +41,7 @@ export interface FolioConfig {
 
 export interface OperadoStampConfig {
   enabled: boolean;
+  showBorder?: boolean;
   institutionText?: string;
   institutionLine1?: string;
   institutionLine2?: string;
@@ -353,7 +355,8 @@ export async function stampSinglePdf(
         institutionLine2: settings.operado.institutionLine2 || 'DE LA PAZ',
         institutionLine3: settings.operado.institutionLine3 || '2024 - 2027',
         shieldImageUrl: settings.operado.shieldImageUrl || null,
-        shieldImageBytes: shieldBytes
+        shieldImageBytes: shieldBytes,
+        showBorder: settings.operado.showBorder !== false
       });
     }
 
@@ -388,32 +391,73 @@ export async function stampSinglePdf(
       const folioFontRegular = await pdfDoc.embedFont(getStandardFontName(settings.folio.fontChoice, false));
       const folioStr = generateFolioString(seqIndex, settings.folio);
       const fontSize = settings.folio.fontSize || 14;
-      const isSimpleTextOnly = settings.folio.style === 'text-only' && !settings.folio.showMetadata;
+      const showBorder = settings.folio.showBorder ?? (settings.folio.style === 'boxed');
 
-      if (isSimpleTextOnly) {
-        // Modo Folio Numérico Simple: Texto limpio y vectorizado directamente en coordenadas seleccionadas
+      if (!settings.folio.showMetadata) {
+        // Modo Folio Numérico Puro
         const textW = folioFont.widthOfTextAtSize(folioStr, fontSize);
         const textH = fontSize;
 
-        const { x: fX, y: fY } = calculatePdfPlacement(
-          settings.folio.normX,
-          settings.folio.normY,
-          textW,
-          textH,
-          pageW,
-          pageH,
-          settings.folio.offsetX,
-          settings.folio.offsetY
-        );
+        if (showBorder) {
+          // Con Marco: Dibuja un recuadro limpio con borde delgado alrededor del número
+          const padX = 8;
+          const padY = 5;
+          const boxW = Math.max(36, textW + padX * 2);
+          const boxH = fontSize + padY * 2;
 
-        page.drawText(folioStr, {
-          x: fX,
-          y: Math.max(4, Math.min(pageH - fontSize - 4, fY)),
-          size: fontSize,
-          font: folioFont,
-          color: folioColor,
-          opacity: folioAlpha
-        });
+          const { x: fX, y: fY } = calculatePdfPlacement(
+            settings.folio.normX,
+            settings.folio.normY,
+            boxW,
+            boxH,
+            pageW,
+            pageH,
+            settings.folio.offsetX,
+            settings.folio.offsetY
+          );
+
+          page.drawRectangle({
+            x: fX,
+            y: fY,
+            width: boxW,
+            height: boxH,
+            color: rgb(0.99, 0.99, 0.99),
+            opacity: folioAlpha * 0.85,
+            borderColor: folioColor,
+            borderWidth: 1.0,
+            borderOpacity: folioAlpha
+          });
+
+          page.drawText(folioStr, {
+            x: fX + padX,
+            y: fY + padY + 1,
+            size: fontSize,
+            font: folioFont,
+            color: folioColor,
+            opacity: folioAlpha
+          });
+        } else {
+          // Sin Marco: Se imprimirá únicamente el número puro sobre el papel sin ningún recuadro alrededor
+          const { x: fX, y: fY } = calculatePdfPlacement(
+            settings.folio.normX,
+            settings.folio.normY,
+            textW,
+            textH,
+            pageW,
+            pageH,
+            settings.folio.offsetX,
+            settings.folio.offsetY
+          );
+
+          page.drawText(folioStr, {
+            x: fX,
+            y: Math.max(4, Math.min(pageH - fontSize - 4, fY)),
+            size: fontSize,
+            font: folioFont,
+            color: folioColor,
+            opacity: folioAlpha
+          });
+        }
       } else {
         // Modo Enmarcado o con Metadatos
         const headerText = (settings.folio.institutionHeader || 'PAZSUMA • FOLIO OFICIAL').slice(0, 36);
@@ -426,7 +470,7 @@ export async function stampSinglePdf(
         );
 
         const boxW = Math.max(80, maxTextW + 18);
-        const boxH = settings.folio.showMetadata ? Math.max(48, fontSize * 2.8) : Math.max(26, fontSize + 12);
+        const boxH = Math.max(48, fontSize * 2.8);
 
         const { x: fX, y: fY } = calculatePdfPlacement(
           settings.folio.normX,
@@ -439,7 +483,7 @@ export async function stampSinglePdf(
           settings.folio.offsetY
         );
 
-        if (settings.folio.style === 'boxed') {
+        if (showBorder) {
           page.drawRectangle({
             x: fX,
             y: fY,
@@ -448,7 +492,7 @@ export async function stampSinglePdf(
             color: rgb(0.99, 0.99, 0.99),
             opacity: folioAlpha * 0.85,
             borderColor: folioColor,
-            borderWidth: 1.2,
+            borderWidth: 1.0,
             borderOpacity: folioAlpha
           });
         } else if (settings.folio.style === 'line') {
@@ -470,47 +514,35 @@ export async function stampSinglePdf(
 
         const textLeft = fX + 9;
 
-        if (settings.folio.showMetadata) {
-          // Encabezado
-          page.drawText(headerText, {
-            x: textLeft,
-            y: fY + boxH - 12,
-            size: Math.max(6, fontSize - 4),
-            font: helveticaBold,
-            color: folioColor,
-            opacity: folioAlpha * 0.85
-          });
+        // Encabezado
+        page.drawText(headerText, {
+          x: textLeft,
+          y: fY + boxH - 12,
+          size: Math.max(6, fontSize - 4),
+          font: helveticaBold,
+          color: folioColor,
+          opacity: folioAlpha * 0.85
+        });
 
-          // Folio destacado
-          page.drawText(folioStr, {
-            x: textLeft,
-            y: fY + boxH - 26,
-            size: fontSize,
-            font: folioFont,
-            color: folioColor,
-            opacity: folioAlpha
-          });
+        // Folio destacado
+        page.drawText(folioStr, {
+          x: textLeft,
+          y: fY + boxH - 26,
+          size: fontSize,
+          font: folioFont,
+          color: folioColor,
+          opacity: folioAlpha
+        });
 
-          // Metadatos
-          page.drawText(metaText, {
-            x: textLeft,
-            y: fY + 6,
-            size: Math.max(6, fontSize - 5),
-            font: folioFontRegular,
-            color: folioColor,
-            opacity: folioAlpha * 0.75
-          });
-        } else {
-          // Solo el Folio centrado en la caja
-          page.drawText(folioStr, {
-            x: textLeft,
-            y: fY + (boxH - fontSize) / 2,
-            size: fontSize,
-            font: folioFont,
-            color: folioColor,
-            opacity: folioAlpha
-          });
-        }
+        // Metadatos
+        page.drawText(metaText, {
+          x: textLeft,
+          y: fY + 6,
+          size: Math.max(6, fontSize - 5),
+          font: folioFontRegular,
+          color: folioColor,
+          opacity: folioAlpha * 0.75
+        });
       }
     }
 

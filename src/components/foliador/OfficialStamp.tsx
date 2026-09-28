@@ -302,8 +302,10 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
       letter-spacing="4px"
     >${operadoText}</text>
 
+    ${showBorder ? `
     <!-- Línea divisoria superior -->
     <line x1="6" y1="34" x2="204" y2="34" stroke="${inkBlue}" stroke-width="1.8" />
+    ` : ''}
 
     <!-- ── NIVEL 2: FECHA DINÁMICA (Texto Rojo) ── -->
     <text
@@ -317,8 +319,10 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
       letter-spacing="3.2px"
     >${formattedDate}</text>
 
+    ${showBorder ? `
     <!-- Línea divisoria inferior -->
     <line x1="6" y1="58" x2="204" y2="58" stroke="${inkBlue}" stroke-width="1.8" />
+    ` : ''}
 
     <!-- ── NIVEL 3: LOGOTIPO INSTITUCIONAL (Escudo + Texto Azul) ── -->
     ${shieldContent}
@@ -428,11 +432,13 @@ export async function renderOfficialStampToCanvas(
   drawTextWithLetterSpacing(ctx, operadoText, (105) * sx, (26) * sy, 4 * sx);
 
   // Línea divisoria 1
-  ctx.lineWidth = 1.8 * sy;
-  ctx.beginPath();
-  ctx.moveTo(6 * sx, 34 * sy);
-  ctx.lineTo(204 * sx, 34 * sy);
-  ctx.stroke();
+  if (showBorder) {
+    ctx.lineWidth = 1.8 * sy;
+    ctx.beginPath();
+    ctx.moveTo(6 * sx, 34 * sy);
+    ctx.lineTo(204 * sx, 34 * sy);
+    ctx.stroke();
+  }
 
   // ── NIVEL 2: FECHA DINÁMICA EN ROJO ──
   const formattedDate = formatOfficialStampDate(date);
@@ -442,12 +448,14 @@ export async function renderOfficialStampToCanvas(
   drawTextWithLetterSpacing(ctx, formattedDate, (105) * sx, (50.5) * sy, 3.2 * sx);
 
   // Línea divisoria 2
-  ctx.strokeStyle = inkBlue;
-  ctx.lineWidth = 1.8 * sy;
-  ctx.beginPath();
-  ctx.moveTo(6 * sx, 58 * sy);
-  ctx.lineTo(204 * sx, 58 * sy);
-  ctx.stroke();
+  if (showBorder) {
+    ctx.strokeStyle = inkBlue;
+    ctx.lineWidth = 1.8 * sy;
+    ctx.beginPath();
+    ctx.moveTo(6 * sx, 58 * sy);
+    ctx.lineTo(204 * sx, 58 * sy);
+    ctx.stroke();
+  }
 
   // ── NIVEL 3: LOGOTIPO INSTITUCIONAL ──
   // Si hay imagen externa cargada, la dibujamos; si no, dibujamos el escudo heráldico en canvas
@@ -789,13 +797,15 @@ export async function drawOfficialStampOnPdf(
   });
 
   // Línea divisoria 1
-  page.drawLine({
-    start: { x: x + 6, y: y + height - 34 * (height / 105) },
-    end: { x: x + width - 6, y: y + height - 34 * (height / 105) },
-    thickness: 1.6,
-    color: pdfBlue,
-    opacity: normalizedOpacity
-  });
+  if (showBorder) {
+    page.drawLine({
+      start: { x: x + 6, y: y + height - 34 * (height / 105) },
+      end: { x: x + width - 6, y: y + height - 34 * (height / 105) },
+      thickness: 1.6,
+      color: pdfBlue,
+      opacity: normalizedOpacity
+    });
+  }
 
   // ── NIVEL 2: FECHA DINÁMICA EN ROJO ──
   const formattedDateStr = formatOfficialStampDate(date);
@@ -823,13 +833,15 @@ export async function drawOfficialStampOnPdf(
   }
 
   // Línea divisoria 2
-  page.drawLine({
-    start: { x: x + 6, y: y + height - 58 * (height / 105) },
-    end: { x: x + width - 6, y: y + height - 58 * (height / 105) },
-    thickness: 1.6,
-    color: pdfBlue,
-    opacity: normalizedOpacity
-  });
+  if (showBorder) {
+    page.drawLine({
+      start: { x: x + 6, y: y + height - 58 * (height / 105) },
+      end: { x: x + width - 6, y: y + height - 58 * (height / 105) },
+      thickness: 1.6,
+      color: pdfBlue,
+      opacity: normalizedOpacity
+    });
+  }
 
   // ── NIVEL 3: LOGOTIPO INSTITUCIONAL ──
   // Si hay imagen de escudo incrustada
@@ -1056,14 +1068,16 @@ export default function OfficialStamp({
           </text>
 
           {/* Línea divisoria superior */}
-          <line
-            x1="6"
-            y1="34"
-            x2="204"
-            y2="34"
-            stroke={inkBlue}
-            strokeWidth="1.8"
-          />
+          {showBorder && (
+            <line
+              x1="6"
+              y1="34"
+              x2="204"
+              y2="34"
+              stroke={inkBlue}
+              strokeWidth="1.8"
+            />
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* 2. PARTE CENTRAL (Fecha Dinámica en Rojo: DD MMM. YYYY)             */}
@@ -1082,14 +1096,16 @@ export default function OfficialStamp({
           </text>
 
           {/* Línea divisoria inferior */}
-          <line
-            x1="6"
-            y1="58"
-            x2="204"
-            y2="58"
-            stroke={inkBlue}
-            strokeWidth="1.8"
-          />
+          {showBorder && (
+            <line
+              x1="6"
+              y1="58"
+              x2="204"
+              y2="58"
+              stroke={inkBlue}
+              strokeWidth="1.8"
+            />
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* 3. PARTE INFERIOR (Logotipo Institucional en Azul)                 */}

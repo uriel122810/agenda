@@ -8,7 +8,7 @@ async function runTests() {
   // Create a base 1-page PDF
   const basePdf = await PDFDocument.create();
   basePdf.addPage([612, 792]);
-  const baseBytes = (await basePdf.save()).buffer;
+  const baseBytes = (await basePdf.save()).buffer as ArrayBuffer;
 
   // ── TEST 1: Direct verification of drawOfficialStampOnPdf vector drawing ──
   console.log('Test 1: drawOfficialStampOnPdf with showBorder: true vs false');
@@ -25,6 +25,13 @@ async function runTests() {
       return origDrawRectTrue(opts);
     };
 
+    let lineCallsTrue = 0;
+    const origDrawLineTrue = pageTrue.drawLine.bind(pageTrue);
+    pageTrue.drawLine = (opts: any) => {
+      lineCallsTrue++;
+      return origDrawLineTrue(opts);
+    };
+
     await drawOfficialStampOnPdf(pageTrue, testDocTrue, {
       x: 100,
       y: 100,
@@ -33,9 +40,12 @@ async function runTests() {
       showBorder: true
     });
 
-    console.log(`  ✓ showBorder: true drew ${borderRectCallsTrue} border rectangle(s) (expected 2: outer and inner border)`);
+    console.log(`  ✓ showBorder: true drew ${borderRectCallsTrue} border rectangle(s) and ${lineCallsTrue} divider line(s)`);
     if (borderRectCallsTrue !== 2) {
       throw new Error(`Expected exactly 2 border drawRectangle calls with showBorder: true, got ${borderRectCallsTrue}`);
+    }
+    if (lineCallsTrue !== 2) {
+      throw new Error(`Expected exactly 2 drawLine calls with showBorder: true, got ${lineCallsTrue}`);
     }
 
     // Test with showBorder: false
@@ -50,6 +60,13 @@ async function runTests() {
       return origDrawRectFalse(opts);
     };
 
+    let lineCallsFalse = 0;
+    const origDrawLineFalse = pageFalse.drawLine.bind(pageFalse);
+    pageFalse.drawLine = (opts: any) => {
+      lineCallsFalse++;
+      return origDrawLineFalse(opts);
+    };
+
     await drawOfficialStampOnPdf(pageFalse, testDocFalse, {
       x: 100,
       y: 100,
@@ -58,9 +75,12 @@ async function runTests() {
       showBorder: false
     });
 
-    console.log(`  ✓ showBorder: false drew ${borderRectCallsFalse} border rectangles (expected 0 border rectangles)`);
+    console.log(`  ✓ showBorder: false drew ${borderRectCallsFalse} border rectangles and ${lineCallsFalse} divider lines`);
     if (borderRectCallsFalse !== 0) {
       throw new Error(`Expected 0 border drawRectangle calls with showBorder: false, got ${borderRectCallsFalse}`);
+    }
+    if (lineCallsFalse !== 0) {
+      throw new Error(`Expected 0 drawLine calls with showBorder: false, got ${lineCallsFalse}`);
     }
   }
 

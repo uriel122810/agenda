@@ -1273,8 +1273,8 @@ export default function FolioVisualEditor({
                     </div>
                     <p className="text-[10px] text-slate-500">
                       {operadoConfig.showBorder !== false
-                        ? 'Dibuja el recuadro delimitador con el estilo de borde de sello físico'
-                        : 'Renderiza limpio únicamente texto "OPERADO", fecha roja y logotipo, sin marco exterior'}
+                        ? 'Dibuja el recuadro delimitador con el estilo de borde de sello físico y divisiones internas'
+                        : 'Renderiza limpio únicamente texto "OPERADO", fecha roja y logotipo, sin bordes ni líneas divisorias'}
                     </p>
                   </div>
                 </div>

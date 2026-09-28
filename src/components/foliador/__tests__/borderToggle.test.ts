@@ -54,9 +54,7 @@ async function runTests() {
     let borderRectCallsFalse = 0;
     const origDrawRectFalse = pageFalse.drawRectangle.bind(pageFalse);
     pageFalse.drawRectangle = (opts: any) => {
-      if (opts.width > 50) {
-        borderRectCallsFalse++;
-      }
+      borderRectCallsFalse++;
       return origDrawRectFalse(opts);
     };
 

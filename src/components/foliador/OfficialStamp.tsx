@@ -856,28 +856,28 @@ export async function drawOfficialStampOnPdf(
         opacity: normalizedOpacity
       });
     } catch {
-      // Fallback: draw outline of shield
-      page.drawRectangle({
+      // Fallback: draw heraldic vector shield outline on PDF
+      try {
+        page.drawSvgPath('M 0 30 L 26 30 C 26 14 13 0 13 0 C 13 0 0 14 0 30 Z', {
+          x: x + 14,
+          y: y + 9,
+          borderColor: pdfBlue,
+          borderWidth: 1.2,
+          borderOpacity: normalizedOpacity
+        });
+      } catch {}
+    }
+  } else {
+    // Draw heraldic vector shield outline on PDF
+    try {
+      page.drawSvgPath('M 0 30 L 26 30 C 26 14 13 0 13 0 C 13 0 0 14 0 30 Z', {
         x: x + 14,
         y: y + 9,
-        width: 28,
-        height: 30,
         borderColor: pdfBlue,
         borderWidth: 1.2,
         borderOpacity: normalizedOpacity
       });
-    }
-  } else {
-    // Draw minimalist vector shield outline on PDF
-    page.drawRectangle({
-      x: x + 14,
-      y: y + 9,
-      width: 28,
-      height: 30,
-      borderColor: pdfBlue,
-      borderWidth: 1.2,
-      borderOpacity: normalizedOpacity
-    });
+    } catch {}
   }
 
   // Texto Institucional: Línea 1

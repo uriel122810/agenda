@@ -22,6 +22,8 @@ export interface OfficialStampProps {
   style?: React.CSSProperties;
   showTexture?: boolean;
   showBorder?: boolean;
+  showHeader?: boolean;
+  headerText?: string;
 }
 
 export interface OfficialStampRenderOptions {
@@ -39,6 +41,8 @@ export interface OfficialStampRenderOptions {
   shieldImageBytes?: ArrayBuffer | null;
   scale?: number; // for high DPI canvas rendering
   showBorder?: boolean;
+  showHeader?: boolean;
+  headerText?: string;
 }
 
 export interface DrawOfficialStampPdfOptions extends OfficialStampRenderOptions {
@@ -234,19 +238,31 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     inkBlue = '#003399',
     inkRed = '#E62B4A',
     opacity = 0.88,
+    showHeader = false,
+    headerText = 'DIRECCIÓN DE EGRESOS',
     width = 210,
-    height = 105,
+    height = showHeader ? 130 : 105,
     shieldImageUrl = null,
     showBorder = true
   } = options;
 
+  const baseH = showHeader ? 130 : 105;
   const normalizedOpacity = opacity > 1 ? opacity / 100 : opacity;
   const formattedDate = formatOfficialStampDate(date);
 
+  const operadoY = showHeader ? 51 : 26;
+  const line1Y = showHeader ? 59 : 34;
+  const dateY = showHeader ? 75.5 : 50.5;
+  const line2Y = showHeader ? 83 : 58;
+  const shieldY = showHeader ? 87 : 62;
+  const instLine1Y = showHeader ? 96.5 : 71.5;
+  const instLine2Y = showHeader ? 109 : 84;
+  const instLine3Y = showHeader ? 119 : 94;
+
   const shieldContent = shieldImageUrl
-    ? `<image href="${shieldImageUrl}" x="12" y="63" width="34" height="34" preserveAspectRatio="xMidYMid meet" />`
+    ? `<image href="${shieldImageUrl}" x="12" y="${shieldY + 1}" width="34" height="34" preserveAspectRatio="xMidYMid meet" />`
     : `
-      <g transform="translate(12, 62) scale(0.32)">
+      <g transform="translate(12, ${shieldY}) scale(0.32)">
         <path d="M20 22 L24 8 L38 15 L50 4 L62 15 L76 8 L80 22 Z" stroke="${inkBlue}" stroke-width="2.8" stroke-linejoin="round" fill="none" />
         <circle cx="35" cy="18" r="1.8" fill="${inkBlue}" />
         <circle cx="50" cy="14" r="2.2" fill="${inkBlue}" />
@@ -270,7 +286,7 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     `;
 
   return `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 105" width="${width}" height="${height}" style="opacity: ${normalizedOpacity};">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 ${baseH}" width="${width}" height="${height}" style="opacity: ${normalizedOpacity};">
   <defs>
     <filter id="ink-bleed-filter" x="-5%" y="-5%" width="110%" height="110%">
       <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" result="noise" />
@@ -284,16 +300,35 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
   <g filter="url(#ink-bleed-filter)">
     ${showBorder ? `
     <!-- Borde exterior de goma -->
-    <rect x="2.5" y="2.5" width="205" height="100" rx="5.5" ry="5.5" stroke="${inkBlue}" stroke-width="2.6" fill="none" />
+    <rect x="2.5" y="2.5" width="205" height="${baseH - 5}" rx="5.5" ry="5.5" stroke="${inkBlue}" stroke-width="2.6" fill="none" />
     
     <!-- Filete interior de sello oficial -->
-    <rect x="5.5" y="5.5" width="199" height="94" rx="3.5" ry="3.5" stroke="${inkBlue}" stroke-width="0.9" stroke-opacity="0.85" fill="none" />
+    <rect x="5.5" y="5.5" width="199" height="${baseH - 11}" rx="3.5" ry="3.5" stroke="${inkBlue}" stroke-width="0.9" stroke-opacity="0.85" fill="none" />
+    ` : ''}
+
+    ${showHeader ? `
+    <!-- ── NIVEL 0: ENCABEZADO SUPERIOR (DIRECCIÓN DE EGRESOS) ── -->
+    <text
+      x="105"
+      y="18.5"
+      text-anchor="middle"
+      fill="${inkBlue}"
+      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+      font-weight="800"
+      font-size="10.5"
+      letter-spacing="1.6px"
+    >${(headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase()}</text>
+
+    ${showBorder ? `
+    <!-- Línea divisoria del encabezado -->
+    <line x1="6" y1="26" x2="204" y2="26" stroke="${inkBlue}" stroke-width="1.6" />
+    ` : ''}
     ` : ''}
 
     <!-- ── NIVEL 1: OPERADO (Texto Azul) ── -->
     <text
       x="105"
-      y="26"
+      y="${operadoY}"
       text-anchor="middle"
       fill="${inkBlue}"
       font-family="'Arial Black', Impact, 'Segoe UI', system-ui, sans-serif"
@@ -303,14 +338,14 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     >${operadoText}</text>
 
     ${showBorder ? `
-    <!-- Línea divisoria superior -->
-    <line x1="6" y1="34" x2="204" y2="34" stroke="${inkBlue}" stroke-width="1.8" />
+    <!-- Línea divisoria superior / intermedia -->
+    <line x1="6" y1="${line1Y}" x2="204" y2="${line1Y}" stroke="${inkBlue}" stroke-width="1.8" />
     ` : ''}
 
     <!-- ── NIVEL 2: FECHA DINÁMICA (Texto Rojo) ── -->
     <text
       x="105"
-      y="50.5"
+      y="${dateY}"
       text-anchor="middle"
       fill="${inkRed}"
       font-family="'Courier New', Courier, 'Roboto Mono', monospace"
@@ -320,8 +355,8 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     >${formattedDate}</text>
 
     ${showBorder ? `
-    <!-- Línea divisoria inferior -->
-    <line x1="6" y1="58" x2="204" y2="58" stroke="${inkBlue}" stroke-width="1.8" />
+    <!-- Línea divisoria central / inferior -->
+    <line x1="6" y1="${line2Y}" x2="204" y2="${line2Y}" stroke="${inkBlue}" stroke-width="1.8" />
     ` : ''}
 
     <!-- ── NIVEL 3: LOGOTIPO INSTITUCIONAL (Escudo + Texto Azul) ── -->
@@ -330,7 +365,7 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     <!-- Línea 1: H. AYUNTAMIENTO -->
     <text
       x="54"
-      y="71.5"
+      y="${instLine1Y}"
       text-anchor="start"
       fill="${inkBlue}"
       font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -342,7 +377,7 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     <!-- Línea 2: DE LA PAZ (en negrita) -->
     <text
       x="54"
-      y="84"
+      y="${instLine2Y}"
       text-anchor="start"
       fill="${inkBlue}"
       font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -354,7 +389,7 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
     <!-- Línea 3: 2024 - 2027 -->
     <text
       x="54"
-      y="94"
+      y="${instLine3Y}"
       text-anchor="start"
       fill="${inkBlue}"
       font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -383,13 +418,16 @@ export async function renderOfficialStampToCanvas(
     inkBlue = '#003399',
     inkRed = '#E62B4A',
     opacity = 0.88,
+    showHeader = false,
+    headerText = 'DIRECCIÓN DE EGRESOS',
     width = 210,
-    height = 105,
+    height = showHeader ? 130 : 105,
     shieldImageUrl = null,
     scale = 3, // 3x for 300 DPI high-res crispness
     showBorder = true
   } = options;
 
+  const baseH = showHeader ? 130 : 105;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -407,21 +445,48 @@ export async function renderOfficialStampToCanvas(
   const w = width;
   const h = height;
   const sx = w / 210;
-  const sy = h / 105;
+  const sy = h / baseH;
+
+  const operadoY = showHeader ? 51 : 26;
+  const line1Y = showHeader ? 59 : 34;
+  const dateY = showHeader ? 75.5 : 50.5;
+  const line2Y = showHeader ? 83 : 58;
+  const shieldY = showHeader ? 87 : 62;
+  const instLine1Y = showHeader ? 96.5 : 71.5;
+  const instLine2Y = showHeader ? 109 : 84;
+  const instLine3Y = showHeader ? 119 : 94;
 
   if (showBorder) {
     // Draw outer rounded rectangle
     ctx.strokeStyle = inkBlue;
     ctx.lineWidth = 2.6 * ((sx + sy) / 2);
-    roundRect(ctx, 2.5 * sx, 2.5 * sy, (205) * sx, (100) * sy, 5.5 * sx);
+    roundRect(ctx, 2.5 * sx, 2.5 * sy, 205 * sx, (baseH - 5) * sy, 5.5 * sx);
     ctx.stroke();
 
     // Draw inner thin border
     ctx.lineWidth = 0.9 * ((sx + sy) / 2);
     ctx.globalAlpha = normalizedOpacity * 0.85;
-    roundRect(ctx, 5.5 * sx, 5.5 * sy, (199) * sx, (94) * sy, 3.5 * sx);
+    roundRect(ctx, 5.5 * sx, 5.5 * sy, 199 * sx, (baseH - 11) * sy, 3.5 * sx);
     ctx.stroke();
     ctx.globalAlpha = normalizedOpacity;
+  }
+
+  // ── NIVEL 0: ENCABEZADO SUPERIOR (DIRECCIÓN DE EGRESOS) ──
+  if (showHeader) {
+    ctx.fillStyle = inkBlue;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = `800 ${Math.round(10.5 * sy)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    drawTextWithLetterSpacing(ctx, (headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase(), 105 * sx, 18.5 * sy, 1.6 * sx);
+
+    if (showBorder) {
+      ctx.strokeStyle = inkBlue;
+      ctx.lineWidth = 1.6 * sy;
+      ctx.beginPath();
+      ctx.moveTo(6 * sx, 26 * sy);
+      ctx.lineTo(204 * sx, 26 * sy);
+      ctx.stroke();
+    }
   }
 
   // ── NIVEL 1: OPERADO ──
@@ -429,14 +494,15 @@ export async function renderOfficialStampToCanvas(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.font = `900 ${Math.round(20 * sy)}px "Arial Black", Impact, sans-serif`;
-  drawTextWithLetterSpacing(ctx, operadoText, (105) * sx, (26) * sy, 4 * sx);
+  drawTextWithLetterSpacing(ctx, operadoText, 105 * sx, operadoY * sy, 4 * sx);
 
   // Línea divisoria 1
   if (showBorder) {
+    ctx.strokeStyle = inkBlue;
     ctx.lineWidth = 1.8 * sy;
     ctx.beginPath();
-    ctx.moveTo(6 * sx, 34 * sy);
-    ctx.lineTo(204 * sx, 34 * sy);
+    ctx.moveTo(6 * sx, line1Y * sy);
+    ctx.lineTo(204 * sx, line1Y * sy);
     ctx.stroke();
   }
 
@@ -445,15 +511,15 @@ export async function renderOfficialStampToCanvas(
   ctx.fillStyle = inkRed;
   ctx.textAlign = 'center';
   ctx.font = `900 ${Math.round(14.5 * sy)}px "Courier New", Courier, monospace`;
-  drawTextWithLetterSpacing(ctx, formattedDate, (105) * sx, (50.5) * sy, 3.2 * sx);
+  drawTextWithLetterSpacing(ctx, formattedDate, 105 * sx, dateY * sy, 3.2 * sx);
 
   // Línea divisoria 2
   if (showBorder) {
     ctx.strokeStyle = inkBlue;
     ctx.lineWidth = 1.8 * sy;
     ctx.beginPath();
-    ctx.moveTo(6 * sx, 58 * sy);
-    ctx.lineTo(204 * sx, 58 * sy);
+    ctx.moveTo(6 * sx, line2Y * sy);
+    ctx.lineTo(204 * sx, line2Y * sy);
     ctx.stroke();
   }
 
@@ -463,17 +529,17 @@ export async function renderOfficialStampToCanvas(
     try {
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve, reject) => {
+      await new Promise<void>((resolve) => {
         img.onload = () => resolve();
         img.onerror = () => resolve(); // fallback gracefully
         img.src = shieldImageUrl;
       });
-      ctx.drawImage(img, 12 * sx, 62 * sy, 34 * sx, 34 * sy);
+      ctx.drawImage(img, 12 * sx, (shieldY + 1) * sy, 34 * sx, 34 * sy);
     } catch {
-      drawVectorShieldOnCanvas(ctx, 12 * sx, 62 * sy, 34 * sx, 34 * sy, inkBlue);
+      drawVectorShieldOnCanvas(ctx, 12 * sx, shieldY * sy, 34 * sx, 34 * sy, inkBlue);
     }
   } else {
-    drawVectorShieldOnCanvas(ctx, 12 * sx, 62 * sy, 34 * sx, 34 * sy, inkBlue);
+    drawVectorShieldOnCanvas(ctx, 12 * sx, shieldY * sy, 34 * sx, 34 * sy, inkBlue);
   }
 
   // Texto Institucional
@@ -482,15 +548,15 @@ export async function renderOfficialStampToCanvas(
 
   // Línea 1: H. AYUNTAMIENTO
   ctx.font = `700 ${Math.round(8.8 * sy)}px sans-serif`;
-  drawTextWithLetterSpacing(ctx, institutionLine1, 54 * sx, 71.5 * sy, 1.2 * sx);
+  drawTextWithLetterSpacing(ctx, institutionLine1, 54 * sx, instLine1Y * sy, 1.2 * sx);
 
   // Línea 2: DE LA PAZ (en negrita)
   ctx.font = `900 ${Math.round(11.8 * sy)}px sans-serif`;
-  drawTextWithLetterSpacing(ctx, institutionLine2, 54 * sx, 84 * sy, 1.8 * sx);
+  drawTextWithLetterSpacing(ctx, institutionLine2, 54 * sx, instLine2Y * sy, 1.8 * sx);
 
   // Línea 3: 2024 - 2027
   ctx.font = `600 ${Math.round(7.5 * sy)}px sans-serif`;
-  drawTextWithLetterSpacing(ctx, institutionLine3, 54 * sx, 94 * sy, 2.4 * sx);
+  drawTextWithLetterSpacing(ctx, institutionLine3, 54 * sx, instLine3Y * sy, 2.4 * sx);
 
   // Micro-textura de tinta física (porosidad del caucho)
   applySubtleInkTexture(ctx, w, h);
@@ -708,7 +774,9 @@ export async function drawOfficialStampOnPdf(
     x,
     y,
     width = 210,
-    height = 105,
+    showHeader = false,
+    headerText = 'DIRECCIÓN DE EGRESOS',
+    height = showHeader ? 130 : 105,
     opacity = 0.88,
     inkBlue = '#003399',
     inkRed = '#E62B4A',
@@ -721,12 +789,16 @@ export async function drawOfficialStampOnPdf(
     showBorder = true
   } = options;
 
+  const baseH = showHeader ? 130 : 105;
   const normalizedOpacity = opacity > 1 ? opacity / 100 : opacity;
 
   // 1. Try high-resolution PNG rendering via canvas if in browser environment
   try {
     const pngBytes = await generateOfficialStampPngBytes({
       ...options,
+      showHeader,
+      headerText,
+      height,
       showBorder,
       opacity: 1 // Keep PNG crisp, pdf-lib applies target opacity on placement
     });
@@ -756,6 +828,18 @@ export async function drawOfficialStampOnPdf(
   const courierBold = await pdfDoc.embedFont('Courier-Bold');
   const helveticaRegular = await pdfDoc.embedFont('Helvetica');
 
+  const scaleY = height / baseH;
+  const scaleX = width / 210;
+
+  const operadoBaseline = showHeader ? 51 : 26;
+  const line1Y = showHeader ? 59 : 34;
+  const dateBaseline = showHeader ? 75.5 : 51;
+  const line2Y = showHeader ? 83 : 58;
+  const shieldY = showHeader ? 87 : 62;
+  const instLine1Y = showHeader ? 96.5 : 73;
+  const instLine2Y = showHeader ? 109 : 85;
+  const instLine3Y = showHeader ? 119 : 95;
+
   if (showBorder) {
     // Outer border
     page.drawRectangle({
@@ -783,13 +867,38 @@ export async function drawOfficialStampOnPdf(
     });
   }
 
+  // ── NIVEL 0: ENCABEZADO SUPERIOR (DIRECCIÓN DE EGRESOS) ──
+  if (showHeader) {
+    const cleanHeaderText = (headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase();
+    const headerFontSize = 10 * scaleY;
+    const headerWidth = helveticaBold.widthOfTextAtSize(cleanHeaderText, headerFontSize);
+    page.drawText(cleanHeaderText, {
+      x: x + (width - headerWidth) / 2,
+      y: y + height - 18.5 * scaleY,
+      size: headerFontSize,
+      font: helveticaBold,
+      color: pdfBlue,
+      opacity: normalizedOpacity
+    });
+
+    if (showBorder) {
+      page.drawLine({
+        start: { x: x + 6 * scaleX, y: y + height - 26 * scaleY },
+        end: { x: x + width - 6 * scaleX, y: y + height - 26 * scaleY },
+        thickness: 1.6,
+        color: pdfBlue,
+        opacity: normalizedOpacity
+      });
+    }
+  }
+
   // ── NIVEL 1: OPERADO ──
-  const operadoFontSize = 18 * (height / 105);
+  const operadoFontSize = 18 * scaleY;
   const operadoTextStr = (operadoText || 'OPERADO').toUpperCase();
   const operadoWidth = helveticaBold.widthOfTextAtSize(operadoTextStr, operadoFontSize);
   page.drawText(operadoTextStr, {
     x: x + (width - operadoWidth) / 2,
-    y: y + height - 26 * (height / 105),
+    y: y + height - operadoBaseline * scaleY,
     size: operadoFontSize,
     font: helveticaBold,
     color: pdfBlue,
@@ -799,8 +908,8 @@ export async function drawOfficialStampOnPdf(
   // Línea divisoria 1
   if (showBorder) {
     page.drawLine({
-      start: { x: x + 6, y: y + height - 34 * (height / 105) },
-      end: { x: x + width - 6, y: y + height - 34 * (height / 105) },
+      start: { x: x + 6 * scaleX, y: y + height - line1Y * scaleY },
+      end: { x: x + width - 6 * scaleX, y: y + height - line1Y * scaleY },
       thickness: 1.6,
       color: pdfBlue,
       opacity: normalizedOpacity
@@ -809,9 +918,9 @@ export async function drawOfficialStampOnPdf(
 
   // ── NIVEL 2: FECHA DINÁMICA EN ROJO ──
   const formattedDateStr = formatOfficialStampDate(date);
-  const dateFontSize = 13 * (height / 105);
+  const dateFontSize = 13 * scaleY;
   const dateChars = Array.from(formattedDateStr);
-  const charSpacing = 2.4;
+  const charSpacing = 2.4 * scaleX;
   let totalDateWidth = 0;
   dateChars.forEach(ch => {
     totalDateWidth += courierBold.widthOfTextAtSize(ch, dateFontSize) + charSpacing;
@@ -819,7 +928,7 @@ export async function drawOfficialStampOnPdf(
   totalDateWidth -= charSpacing;
 
   let curX = x + (width - totalDateWidth) / 2;
-  const dateY = y + height - 51 * (height / 105);
+  const dateY = y + height - dateBaseline * scaleY;
   for (const ch of dateChars) {
     page.drawText(ch, {
       x: curX,
@@ -835,8 +944,8 @@ export async function drawOfficialStampOnPdf(
   // Línea divisoria 2
   if (showBorder) {
     page.drawLine({
-      start: { x: x + 6, y: y + height - 58 * (height / 105) },
-      end: { x: x + width - 6, y: y + height - 58 * (height / 105) },
+      start: { x: x + 6 * scaleX, y: y + height - line2Y * scaleY },
+      end: { x: x + width - 6 * scaleX, y: y + height - line2Y * scaleY },
       thickness: 1.6,
       color: pdfBlue,
       opacity: normalizedOpacity
@@ -844,23 +953,23 @@ export async function drawOfficialStampOnPdf(
   }
 
   // ── NIVEL 3: LOGOTIPO INSTITUCIONAL ──
-  // Si hay imagen de escudo incrustada
+  const shieldBottomY = y + height - (shieldY + 34) * scaleY;
   if (shieldImageBytes) {
     try {
       const shieldImg = await pdfDoc.embedPng(shieldImageBytes);
       page.drawImage(shieldImg, {
-        x: x + 12,
-        y: y + 8,
-        width: 34 * (width / 210),
-        height: 34 * (height / 105),
+        x: x + 12 * scaleX,
+        y: shieldBottomY,
+        width: 34 * scaleX,
+        height: 34 * scaleY,
         opacity: normalizedOpacity
       });
     } catch {
       // Fallback: draw heraldic vector shield outline on PDF
       try {
         page.drawSvgPath('M 0 30 L 26 30 C 26 14 13 0 13 0 C 13 0 0 14 0 30 Z', {
-          x: x + 14,
-          y: y + 9,
+          x: x + 14 * scaleX,
+          y: shieldBottomY,
           borderColor: pdfBlue,
           borderWidth: 1.2,
           borderOpacity: normalizedOpacity
@@ -871,8 +980,8 @@ export async function drawOfficialStampOnPdf(
     // Draw heraldic vector shield outline on PDF
     try {
       page.drawSvgPath('M 0 30 L 26 30 C 26 14 13 0 13 0 C 13 0 0 14 0 30 Z', {
-        x: x + 14,
-        y: y + 9,
+        x: x + 14 * scaleX,
+        y: shieldBottomY,
         borderColor: pdfBlue,
         borderWidth: 1.2,
         borderOpacity: normalizedOpacity
@@ -883,9 +992,9 @@ export async function drawOfficialStampOnPdf(
   // Texto Institucional: Línea 1
   const line1Str = (institutionLine1 || 'H. AYUNTAMIENTO').toUpperCase();
   page.drawText(line1Str, {
-    x: x + 52 * (width / 210),
-    y: y + height - 73 * (height / 105),
-    size: 8.5 * (height / 105),
+    x: x + 52 * scaleX,
+    y: y + height - instLine1Y * scaleY,
+    size: 8.5 * scaleY,
     font: helveticaBold,
     color: pdfBlue,
     opacity: normalizedOpacity
@@ -894,9 +1003,9 @@ export async function drawOfficialStampOnPdf(
   // Línea 2: DE LA PAZ
   const line2Str = (institutionLine2 || 'DE LA PAZ').toUpperCase();
   page.drawText(line2Str, {
-    x: x + 52 * (width / 210),
-    y: y + height - 85 * (height / 105),
-    size: 11.5 * (height / 105),
+    x: x + 52 * scaleX,
+    y: y + height - instLine2Y * scaleY,
+    size: 11.5 * scaleY,
     font: helveticaBold,
     color: pdfBlue,
     opacity: normalizedOpacity
@@ -905,9 +1014,9 @@ export async function drawOfficialStampOnPdf(
   // Línea 3: 2024 - 2027
   const line3Str = institutionLine3 || '2024 - 2027';
   page.drawText(line3Str, {
-    x: x + 52 * (width / 210),
-    y: y + height - 95 * (height / 105),
-    size: 7.2 * (height / 105),
+    x: x + 52 * scaleX,
+    y: y + height - instLine3Y * scaleY,
+    size: 7.2 * scaleY,
     font: helveticaRegular,
     color: pdfBlue,
     opacity: normalizedOpacity
@@ -927,8 +1036,10 @@ export default function OfficialStamp({
   inkBlue = '#003399',
   inkRed = '#E62B4A',
   opacity = 0.88,
+  showHeader = false,
+  headerText = 'DIRECCIÓN DE EGRESOS',
   width = 210,
-  height = 105,
+  height = showHeader ? 130 : 105,
   shieldImageUrl = null,
   isInteractive = false,
   isSelected = false,
@@ -941,6 +1052,16 @@ export default function OfficialStamp({
   const filterId = useId();
   const formattedDate = formatOfficialStampDate(date);
   const normalizedOpacity = opacity > 1 ? opacity / 100 : opacity;
+  const baseH = showHeader ? 130 : 105;
+
+  const operadoY = showHeader ? 51 : 26;
+  const line1Y = showHeader ? 59 : 34;
+  const dateY = showHeader ? 75.5 : 50.5;
+  const line2Y = showHeader ? 83 : 58;
+  const shieldY = showHeader ? 87 : 62;
+  const instLine1Y = showHeader ? 96.5 : 71.5;
+  const instLine2Y = showHeader ? 109 : 84;
+  const instLine3Y = showHeader ? 119 : 94;
 
   // Handle Interactive Resizing via Drag Handle
   const [isResizing, setIsResizing] = useState(false);
@@ -961,9 +1082,8 @@ export default function OfficialStamp({
   const handleResizePointerMove = (e: React.PointerEvent) => {
     if (!isResizing || !onResize) return;
     const deltaX = e.clientX - resizeStartPos.current.x;
-    // Keep aspect ratio ~ 2:1
     const newWidth = Math.max(120, Math.min(360, Math.round(resizeStartPos.current.w + deltaX)));
-    const newHeight = Math.round(newWidth / 2);
+    const newHeight = Math.round(newWidth * (baseH / 210));
     onResize(newWidth, newHeight);
   };
 
@@ -988,7 +1108,7 @@ export default function OfficialStamp({
       }}
     >
       <svg
-        viewBox="0 0 210 105"
+        viewBox={`0 0 210 ${baseH}`}
         width="100%"
         height="100%"
         className="w-full h-full pointer-events-none drop-shadow-xs"
@@ -1015,7 +1135,7 @@ export default function OfficialStamp({
                 x="2.5"
                 y="2.5"
                 width="205"
-                height="100"
+                height={baseH - 5}
                 rx="5.5"
                 ry="5.5"
                 fill="#ffffff"
@@ -1027,7 +1147,7 @@ export default function OfficialStamp({
                 x="2.5"
                 y="2.5"
                 width="205"
-                height="100"
+                height={baseH - 5}
                 rx="5.5"
                 ry="5.5"
                 stroke={inkBlue}
@@ -1040,7 +1160,7 @@ export default function OfficialStamp({
                 x="5.5"
                 y="5.5"
                 width="199"
-                height="94"
+                height={baseH - 11}
                 rx="3.5"
                 ry="3.5"
                 stroke={inkBlue}
@@ -1052,11 +1172,42 @@ export default function OfficialStamp({
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* 0. NIVEL SUPERIOR: ENCABEZADO PERSONALIZABLE (DIRECCIÓN DE EGRESOS) */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {showHeader && (
+            <>
+              <text
+                x="105"
+                y="18.5"
+                textAnchor="middle"
+                fill={inkBlue}
+                fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+                fontWeight="800"
+                fontSize="10.5"
+                letterSpacing="1.6px"
+              >
+                {(headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase()}
+              </text>
+
+              {showBorder && (
+                <line
+                  x1="6"
+                  y1="26"
+                  x2="204"
+                  y2="26"
+                  stroke={inkBlue}
+                  strokeWidth="1.6"
+                />
+              )}
+            </>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
           {/* 1. PARTE SUPERIOR (Texto Azul: OPERADO)                              */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
           <text
             x="105"
-            y="26"
+            y={operadoY}
             textAnchor="middle"
             fill={inkBlue}
             fontFamily="'Arial Black', Impact, 'Segoe UI', system-ui, sans-serif"
@@ -1071,9 +1222,9 @@ export default function OfficialStamp({
           {showBorder && (
             <line
               x1="6"
-              y1="34"
+              y1={line1Y}
               x2="204"
-              y2="34"
+              y2={line1Y}
               stroke={inkBlue}
               strokeWidth="1.8"
             />
@@ -1084,7 +1235,7 @@ export default function OfficialStamp({
           {/* ═══════════════════════════════════════════════════════════════════ */}
           <text
             x="105"
-            y="50.5"
+            y={dateY}
             textAnchor="middle"
             fill={inkRed}
             fontFamily="'Courier New', Courier, 'Roboto Mono', monospace"
@@ -1099,9 +1250,9 @@ export default function OfficialStamp({
           {showBorder && (
             <line
               x1="6"
-              y1="58"
+              y1={line2Y}
               x2="204"
-              y2="58"
+              y2={line2Y}
               stroke={inkBlue}
               strokeWidth="1.8"
             />
@@ -1114,13 +1265,13 @@ export default function OfficialStamp({
             <image
               href={shieldImageUrl}
               x="12"
-              y="63"
+              y={shieldY + 1}
               width="34"
               height="34"
               preserveAspectRatio="xMidYMid meet"
             />
           ) : (
-            <g transform="translate(12, 62) scale(0.32)">
+            <g transform={`translate(12, ${shieldY}) scale(0.32)`}>
               <path d="M20 22 L24 8 L38 15 L50 4 L62 15 L76 8 L80 22 Z" stroke={inkBlue} strokeWidth="2.8" strokeLinejoin="round" fill="none" />
               <circle cx="35" cy="18" r="1.8" fill={inkBlue} />
               <circle cx="50" cy="14" r="2.2" fill={inkBlue} />
@@ -1146,7 +1297,7 @@ export default function OfficialStamp({
           {/* Línea 1: H. AYUNTAMIENTO */}
           <text
             x="54"
-            y="71.5"
+            y={instLine1Y}
             textAnchor="start"
             fill={inkBlue}
             fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -1160,7 +1311,7 @@ export default function OfficialStamp({
           {/* Línea 2: DE LA PAZ (en negrita) */}
           <text
             x="54"
-            y="84"
+            y={instLine2Y}
             textAnchor="start"
             fill={inkBlue}
             fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -1174,7 +1325,7 @@ export default function OfficialStamp({
           {/* Línea 3: 2024 - 2027 */}
           <text
             x="54"
-            y="94"
+            y={instLine3Y}
             textAnchor="start"
             fill={inkBlue}
             fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"

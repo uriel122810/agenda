@@ -314,10 +314,10 @@ export default function FolioPreviewCanvas({
             >
               {/* Tooltip de Coordenadas y Dimensiones Flotante */}
               <div className="hidden group-hover:flex absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] px-2 py-0.5 rounded font-mono pointer-events-none whitespace-nowrap shadow-md z-30">
-                Sello Oficial 3 Niveles {operadoConfig.showBorder !== false ? '(Con Marco)' : '(Sin Marco)'} • X: {Math.round(operadoConfig.normX * 100)}% Y: {Math.round(operadoConfig.normY * 100)}% ({operadoConfig.width || 210}×{operadoConfig.height || 105} pt)
+                Sello Oficial {operadoConfig.showHeader ? '4 Niveles (Con Encabezado)' : '3 Niveles'} {operadoConfig.showBorder !== false ? '(Con Marco)' : '(Sin Marco)'} • X: {Math.round(operadoConfig.normX * 100)}% Y: {Math.round(operadoConfig.normY * 100)}% ({operadoConfig.width || 210}×{operadoConfig.height || (operadoConfig.showHeader ? 130 : 105)} pt)
               </div>
 
-              {/* Sello Oficial de Tres Niveles: OPERADO (Azul) + Fecha (Rojo) + H. Ayuntamiento (Azul) */}
+              {/* Sello Oficial de Tres/Cuatro Niveles: Encabezado (Opcional) + OPERADO (Azul) + Fecha (Rojo) + H. Ayuntamiento (Azul) */}
               <OfficialStamp
                 date={operadoConfig.stampDateIso}
                 operadoText={operadoConfig.operadoWord || 'OPERADO'}
@@ -328,9 +328,11 @@ export default function FolioPreviewCanvas({
                 inkRed={operadoConfig.dateColorHex || '#E62B4A'}
                 opacity={operadoConfig.opacity || 88}
                 width={(operadoConfig.width || 210) * 0.78}
-                height={(operadoConfig.height || 105) * 0.78}
+                height={(operadoConfig.height || (operadoConfig.showHeader ? 130 : 105)) * 0.78}
                 shieldImageUrl={operadoConfig.shieldImageUrl || null}
                 showBorder={operadoConfig.showBorder !== false}
+                showHeader={Boolean(operadoConfig.showHeader)}
+                headerText={operadoConfig.headerText || 'DIRECCIÓN DE EGRESOS'}
                 isSelected={activeElement === 'operado'}
                 isInteractive={true}
                 onResize={(newW, newH) => {
@@ -393,7 +395,7 @@ export default function FolioPreviewCanvas({
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-[#003399]" />
             <span>
-              Sello Oficial 3 Niveles: {operadoConfig.enabled ? (operadoConfig.showBorder !== false ? 'Activo (Con Marco)' : 'Activo (Sin Marco)') : 'Oculto'}
+              Sello Oficial {operadoConfig.showHeader ? '4 Niveles' : '3 Niveles'}: {operadoConfig.enabled ? (operadoConfig.showBorder !== false ? 'Activo (Con Marco)' : 'Activo (Sin Marco)') : 'Oculto'}
             </span>
           </span>
           <span>•</span>

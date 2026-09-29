@@ -42,6 +42,8 @@ export interface FolioConfig {
 export interface OperadoStampConfig {
   enabled: boolean;
   showBorder?: boolean;
+  showHeader?: boolean;
+  headerText?: string;
   institutionText?: string;
   institutionLine1?: string;
   institutionLine2?: string;
@@ -56,7 +58,7 @@ export interface OperadoStampConfig {
   opacity: number; // 10 to 100 (default: 88, simulating real rubber stamp ink)
   isUnderlay: boolean; // Background layer / watermark mode (low opacity, non-blocking)
   width: number; // in points (default: 210)
-  height: number; // in points (default: 105)
+  height: number; // in points (default: 105, or 130 with header)
   // Placement
   positionMatrix: 'tl' | 'tc' | 'tr' | 'ml' | 'mc' | 'mr' | 'bl' | 'bc' | 'br' | 'free';
   normX: number;
@@ -323,10 +325,11 @@ export async function stampSinglePdf(
     const shouldStampLogo = settings.logo.enabled && logoIndices.includes(pageIdx);
     const shouldStampFolio = settings.folio.enabled && folioIndices.includes(pageIdx);
 
-    // ── 1. ESTAMPAR SELLO OFICIAL DE TRES NIVELES ("OPERADO") ─────────────
+    // ── 1. ESTAMPAR SELLO OFICIAL DE TRES/CUATRO NIVELES ("OPERADO") ─────────────
     if (shouldStampOperado) {
+      const defaultStampH = settings.operado.showHeader ? 130 : 105;
       const stampW = settings.operado.width || 210;
-      const stampH = settings.operado.height || 105;
+      const stampH = settings.operado.height || defaultStampH;
       const { x: stampX, y: stampY } = calculatePdfPlacement(
         settings.operado.normX,
         settings.operado.normY,
@@ -356,7 +359,9 @@ export async function stampSinglePdf(
         institutionLine3: settings.operado.institutionLine3 || '2024 - 2027',
         shieldImageUrl: settings.operado.shieldImageUrl || null,
         shieldImageBytes: shieldBytes,
-        showBorder: settings.operado.showBorder !== false
+        showBorder: settings.operado.showBorder !== false,
+        showHeader: Boolean(settings.operado.showHeader),
+        headerText: settings.operado.headerText || 'DIRECCIÓN DE EGRESOS'
       });
     }
 

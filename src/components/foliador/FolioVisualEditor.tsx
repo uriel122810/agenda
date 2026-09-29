@@ -7,7 +7,7 @@ import {
   FileText, ShieldCheck, CheckCircle2, AlertCircle, X, Trash2,
   Layers, FileCheck, Archive, Hash, FolderDown, Plus, Info,
   ChevronRight, ArrowRight, ExternalLink, RotateCw, Type,
-  Bold, Lock, Unlock, Grid, Square
+  Bold, Lock, Unlock, Grid, Square, Heading
 } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
@@ -126,6 +126,8 @@ export default function FolioVisualEditor({
   const [operadoConfig, setOperadoConfig] = useState<OperadoStampConfig>({
     enabled: true,
     showBorder: true,
+    showHeader: false,
+    headerText: 'DIRECCIÓN DE EGRESOS',
     operadoWord: 'OPERADO',
     institutionLine1: 'H. AYUNTAMIENTO',
     institutionLine2: 'DE LA PAZ',
@@ -1296,6 +1298,107 @@ export default function FolioVisualEditor({
                 </label>
               </div>
 
+              {/* Opción para Incluir Encabezado Superior (Header Toggle) */}
+              <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-blue-50/60 border border-blue-200 transition">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-[#003399]/10 text-[#003399] flex items-center justify-center shrink-0">
+                      <Heading className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800">
+                          Incluir Encabezado Superior
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider transition ${
+                            operadoConfig.showHeader
+                              ? 'bg-[#003399] text-white shadow-2xs'
+                              : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {operadoConfig.showHeader ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        {operadoConfig.showHeader
+                          ? 'Agrega departamento o área institucional (ej. DIRECCIÓN DE EGRESOS) con línea divisoria superior'
+                          : 'Sin encabezado (estructura clásica de 3 niveles)'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Switch Toggle */}
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(operadoConfig.showHeader)}
+                      onChange={e => {
+                        const newShowHeader = e.target.checked;
+                        const newH = Math.round((operadoConfig.width || 210) * (newShowHeader ? 130 / 210 : 105 / 210));
+                        setOperadoConfig(prev => ({
+                          ...prev,
+                          showHeader: newShowHeader,
+                          height: newH,
+                          headerText: prev.headerText || 'DIRECCIÓN DE EGRESOS'
+                        }));
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#003399]"></div>
+                  </label>
+                </div>
+
+                {/* Campo de texto editable y atajos cuando el encabezado está activo */}
+                {operadoConfig.showHeader && (
+                  <div className="pt-2 border-t border-blue-200/60 space-y-2">
+                    <label className="text-[10px] font-bold text-[#003399] uppercase tracking-wide block">
+                      Texto del Encabezado (Departamento / Área):
+                    </label>
+                    <input
+                      type="text"
+                      value={operadoConfig.headerText || ''}
+                      onChange={e =>
+                        setOperadoConfig(prev => ({
+                          ...prev,
+                          headerText: e.target.value.toUpperCase()
+                        }))
+                      }
+                      placeholder="DIRECCIÓN DE EGRESOS"
+                      className="w-full rounded-lg border border-blue-200 bg-white p-2 text-xs font-extrabold uppercase text-[#003399] tracking-wider focus:outline-none focus:ring-1 focus:ring-[#003399]"
+                    />
+                    {/* Chips de departamentos comunes */}
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {[
+                        'DIRECCIÓN DE EGRESOS',
+                        'DIRECCIÓN DE INGRESOS',
+                        'TESORERÍA MUNICIPAL',
+                        'OFICIALÍA MAYOR',
+                        'DIRECCIÓN DE CONTABILIDAD'
+                      ].map(dept => (
+                        <button
+                          key={dept}
+                          type="button"
+                          onClick={() =>
+                            setOperadoConfig(prev => ({
+                              ...prev,
+                              headerText: dept
+                            }))
+                          }
+                          className={`text-[9px] px-2 py-0.5 rounded-md font-semibold transition cursor-pointer border ${
+                            operadoConfig.headerText === dept
+                              ? 'bg-[#003399] text-white border-[#003399]'
+                              : 'bg-white text-slate-700 border-blue-200 hover:bg-blue-100/60'
+                          }`}
+                        >
+                          {dept}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Input oculto para carga de PNG transparente del escudo/leyenda institucional */}
               <input
                 ref={shieldInputRef}
@@ -1310,7 +1413,7 @@ export default function FolioVisualEditor({
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-extrabold text-[#003399] uppercase flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-[#003399]" />
-                    <span>1. Parte Superior (Texto Azul)</span>
+                    <span>{operadoConfig.showHeader ? '1. Nivel Central Superior (Texto: OPERADO)' : '1. Parte Superior (Texto Azul)'}</span>
                   </label>
                   <span className="text-[10px] font-mono font-bold text-[#003399] bg-white px-2 py-0.5 rounded border border-blue-200">
                     {operadoConfig.colorHex}
@@ -1343,7 +1446,7 @@ export default function FolioVisualEditor({
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-extrabold text-red-900 uppercase flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5 text-[#E62B4A]" />
-                    <span>2. Parte Central (Fecha Dinámica en Rojo)</span>
+                    <span>{operadoConfig.showHeader ? '2. Nivel Central (Fecha Dinámica en Rojo)' : '2. Parte Central (Fecha Dinámica en Rojo)'}</span>
                   </label>
                   <span className="text-[10px] font-mono font-black bg-white text-[#E62B4A] px-2 py-0.5 rounded border border-red-200">
                     {formatOfficialStampDate(operadoConfig.stampDateIso)}
@@ -1388,7 +1491,7 @@ export default function FolioVisualEditor({
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-extrabold text-[#003399] uppercase flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-[#003399]" />
-                    <span>3. Parte Inferior (Logotipo Institucional)</span>
+                    <span>{operadoConfig.showHeader ? '3. Nivel Inferior (Logotipo Institucional)' : '3. Parte Inferior (Logotipo Institucional)'}</span>
                   </label>
                   <span className="text-[9px] font-bold text-slate-500">
                     {operadoConfig.shieldImageUrl ? 'PNG Personalizado' : 'Escudo Vectorial La Paz'}

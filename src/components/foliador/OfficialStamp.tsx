@@ -319,10 +319,8 @@ export function generateOfficialStampSvgString(options: OfficialStampRenderOptio
       letter-spacing="1.6px"
     >${(headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase()}</text>
 
-    ${showBorder ? `
-    <!-- Línea divisoria del encabezado -->
+    <!-- Línea divisoria del encabezado (siempre visible como parte integral del encabezado) -->
     <line x1="6" y1="26" x2="204" y2="26" stroke="${inkBlue}" stroke-width="1.6" />
-    ` : ''}
     ` : ''}
 
     <!-- ── NIVEL 1: OPERADO (Texto Azul) ── -->
@@ -479,14 +477,13 @@ export async function renderOfficialStampToCanvas(
     ctx.font = `800 ${Math.round(10.5 * sy)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     drawTextWithLetterSpacing(ctx, (headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase(), 105 * sx, 18.5 * sy, 1.6 * sx);
 
-    if (showBorder) {
-      ctx.strokeStyle = inkBlue;
-      ctx.lineWidth = 1.6 * sy;
-      ctx.beginPath();
-      ctx.moveTo(6 * sx, 26 * sy);
-      ctx.lineTo(204 * sx, 26 * sy);
-      ctx.stroke();
-    }
+    // Línea sub-encabezado: parte integral de la estructura del encabezado superior (siempre visible)
+    ctx.strokeStyle = inkBlue;
+    ctx.lineWidth = 1.6 * sy;
+    ctx.beginPath();
+    ctx.moveTo(6 * sx, 26 * sy);
+    ctx.lineTo(204 * sx, 26 * sy);
+    ctx.stroke();
   }
 
   // ── NIVEL 1: OPERADO ──
@@ -881,15 +878,14 @@ export async function drawOfficialStampOnPdf(
       opacity: normalizedOpacity
     });
 
-    if (showBorder) {
-      page.drawLine({
-        start: { x: x + 6 * scaleX, y: y + height - 26 * scaleY },
-        end: { x: x + width - 6 * scaleX, y: y + height - 26 * scaleY },
-        thickness: 1.6,
-        color: pdfBlue,
-        opacity: normalizedOpacity
-      });
-    }
+    // Línea sub-encabezado: parte integral de la estructura del encabezado superior (siempre visible)
+    page.drawLine({
+      start: { x: x + 6 * scaleX, y: y + height - 26 * scaleY },
+      end: { x: x + width - 6 * scaleX, y: y + height - 26 * scaleY },
+      thickness: 1.6,
+      color: pdfBlue,
+      opacity: normalizedOpacity
+    });
   }
 
   // ── NIVEL 1: OPERADO ──
@@ -1189,16 +1185,15 @@ export default function OfficialStamp({
                 {(headerText || 'DIRECCIÓN DE EGRESOS').toUpperCase()}
               </text>
 
-              {showBorder && (
-                <line
-                  x1="6"
-                  y1="26"
-                  x2="204"
-                  y2="26"
-                  stroke={inkBlue}
-                  strokeWidth="1.6"
-                />
-              )}
+              {/* Línea sub-encabezado: parte integral de la estructura del encabezado superior (siempre visible) */}
+              <line
+                x1="6"
+                y1="26"
+                x2="204"
+                y2="26"
+                stroke={inkBlue}
+                strokeWidth="1.6"
+              />
             </>
           )}
 

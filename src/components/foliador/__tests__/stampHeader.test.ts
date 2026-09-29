@@ -65,8 +65,8 @@ async function runHeaderValidationTests() {
     }
   }
 
-  // ── TEST 2: Direct Vector calls for showHeader: true + showBorder: false (clean mode) ──
-  console.log('\nTest 2: showHeader: true + showBorder: false (clean stamp: 0 borders, 0 lines)');
+  // ── TEST 2: Direct Vector calls for showHeader: true + showBorder: false (clean mode with sub-header line) ──
+  console.log('\nTest 2: showHeader: true + showBorder: false (0 outer borders, 1 sub-header line)');
   {
     const doc = await PDFDocument.create();
     const page = doc.addPage([612, 792]);
@@ -102,36 +102,58 @@ async function runHeaderValidationTests() {
       showBorder: false
     });
 
-    console.log(`  ✓ Rectangles drawn: ${rectCalls} (expected 0)`);
-    console.log(`  ✓ Lines drawn: ${lineCalls} (expected 0)`);
+    console.log(`  ✓ Rectangles drawn: ${rectCalls} (expected 0: no bounding borders)`);
+    console.log(`  ✓ Lines drawn: ${lineCalls} (expected 1: integral sub-header line only)`);
     console.log(`  ✓ Texts drawn:`, drawnTexts);
 
     if (rectCalls !== 0) {
       throw new Error(`Expected 0 border rectangles in clean mode, got ${rectCalls}`);
     }
-    if (lineCalls !== 0) {
-      throw new Error(`Expected 0 dividing lines in clean mode, got ${lineCalls}`);
+    if (lineCalls !== 1) {
+      throw new Error(`Expected exactly 1 line (sub-header line) in clean mode with header, got ${lineCalls}`);
     }
     if (!drawnTexts.some(t => t.includes('DIRECCIÓN DE EGRESOS'))) {
       throw new Error('Header text "DIRECCIÓN DE EGRESOS" was not drawn in clean mode');
     }
+    if (!drawnTexts.some(t => t.includes('OPERADO'))) {
+      throw new Error('Word "OPERADO" was not drawn in clean mode');
+    }
   }
 
-  // ── TEST 3: SVG string generation with and without showHeader ──
+  // ── TEST 3: SVG string generation with and without showHeader and showBorder ──
   console.log('\nTest 3: SVG string output viewBox and content validation');
   {
-    const svgWithHeader = generateOfficialStampSvgString({
+    const svgWithHeaderAndBorder = generateOfficialStampSvgString({
       showHeader: true,
       headerText: 'TESORERÍA MUNICIPAL',
       showBorder: true
     });
-    if (!svgWithHeader.includes('viewBox="0 0 210 130"')) {
-      throw new Error(`Expected viewBox="0 0 210 130" in SVG with header, got:\n${svgWithHeader.slice(0, 100)}`);
+    if (!svgWithHeaderAndBorder.includes('viewBox="0 0 210 130"')) {
+      throw new Error(`Expected viewBox="0 0 210 130" in SVG with header, got:\n${svgWithHeaderAndBorder.slice(0, 100)}`);
     }
-    if (!svgWithHeader.includes('TESORERÍA MUNICIPAL')) {
+    if (!svgWithHeaderAndBorder.includes('TESORERÍA MUNICIPAL')) {
       throw new Error('Expected "TESORERÍA MUNICIPAL" in SVG');
     }
-    console.log('  ✓ SVG with header has viewBox="0 0 210 130" and contains header text');
+    if (!svgWithHeaderAndBorder.includes('<line x1="6" y1="26" x2="204" y2="26"')) {
+      throw new Error('Expected sub-header line in SVG with header');
+    }
+    console.log('  ✓ SVG with header and border has viewBox="0 0 210 130", header text and divider lines');
+
+    const svgWithHeaderClean = generateOfficialStampSvgString({
+      showHeader: true,
+      headerText: 'DIRECCIÓN DE EGRESOS',
+      showBorder: false
+    });
+    if (!svgWithHeaderClean.includes('<line x1="6" y1="26" x2="204" y2="26"')) {
+      throw new Error('Expected sub-header line to be present in clean mode SVG when showHeader is true');
+    }
+    if (svgWithHeaderClean.includes('stroke-width="2.6"')) {
+      throw new Error('Did not expect outer rubber border in clean mode SVG');
+    }
+    if (svgWithHeaderClean.includes('y1="59"') || svgWithHeaderClean.includes('y1="83"')) {
+      throw new Error('Did not expect intermediate divider lines in clean mode SVG');
+    }
+    console.log('  ✓ SVG with header without border correctly preserves sub-header line and omits frame/dividers');
 
     const svgWithoutHeader = generateOfficialStampSvgString({
       showHeader: false,

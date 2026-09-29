@@ -38,7 +38,11 @@ export interface ProcessedPdfItem {
   stampedBlob?: Blob;
   stampedDocUrl?: string;
   stampedFileName?: string;
+  stampsOnlyBlob?: Blob;
+  stampsOnlyDocUrl?: string;
+  stampsOnlyFileName?: string;
   supabasePublicUrl?: string | null;
+  supabaseStampsOnlyPublicUrl?: string | null;
 }
 
 interface FolioVisualEditorProps {
@@ -92,6 +96,9 @@ export default function FolioVisualEditor({
 
   // ── ORIENTACIÓN DE LIENZO ────────────────────────────────────────────────
   const [canvasOrientation, setCanvasOrientation] = useState<'portrait' | 'landscape'>('portrait');
+
+  // ── GENERACIÓN PARALELA DE DOCUMENTO SOLO SELLOS ─────────────────────────
+  const [generateStampsOnlyPdfDoc, setGenerateStampsOnlyPdfDoc] = useState<boolean>(false);
 
   // ── 1. CONFIGURACIÓN DE TEXTO / FOLIO ─────────────────────────────────────
   const [folioConfig, setFolioConfig] = useState<FolioConfig>({
@@ -398,12 +405,13 @@ export default function FolioVisualEditor({
             folioConfig
           );
 
-          // 1. Estampar con pdf-lib usando el motor avanzado
-          const { modifiedBytes, pagesStamped } = await stampSinglePdf(
+          // 1. Estampar con pdf-lib usando el motor avanzado (incluyendo capa paralela si está activa)
+          const { modifiedBytes, stampsOnlyBytes, pagesStamped } = await stampSinglePdf(
             item.bytes,
             stampSettings,
             i,
-            cumulativePageCount
+            cumulativePageCount,
+            { generateStampsOnly: generateStampsOnlyPdfDoc }
           );
 
           cumulativePageCount += pagesStamped;
@@ -414,6 +422,20 @@ export default function FolioVisualEditor({
           const stampedDocUrl = URL.createObjectURL(stampedBlob);
           const stampedFileName = `${currentFolioStr}_${item.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
+          let stampsOnlyBlob: Blob | undefined = undefined;
+          let stampsOnlyDocUrl: string | undefined = undefined;
+          let stampsOnlyFileName: string | undefined = undefined;
+          let stampsOnlyPublicUrl: string | null = null;
+
+          if (stampsOnlyBytes) {
+            stampsOnlyBlob = new Blob([stampsOnlyBytes as unknown as BlobPart], {
+              type: 'application/pdf'
+            });
+            stampsOnlyDocUrl = URL.createObjectURL(stampsOnlyBlob);
+            const baseWithoutExt = item.name.replace(/\.pdf$/i, '').replace(/[^a-zA-Z0-9.-]/g, '_');
+            stampsOnlyFileName = `${currentFolioStr}_${baseWithoutExt}_SOLO_SELLOS.pdf`;
+          }
+
           // 2. Subir resultado a Supabase Storage (bucket 'documentos_folios')
           setProcessingStatusText(`Subiendo a Supabase Storage (${item.name})...`);
           const { publicUrl } = await uploadStampedPdfToSupabase(
@@ -423,11 +445,35 @@ export default function FolioVisualEditor({
             supabase
           );
 
+          if (stampsOnlyBytes && stampsOnlyFileName) {
+            const uploadRes = await uploadStampedPdfToSupabase(
+              stampsOnlyBytes,
+              stampsOnlyFileName,
+              currentFolioStr,
+              supabase
+            );
+            stampsOnlyPublicUrl = uploadRes.publicUrl;
+          }
+
           item.status = 'completado';
           item.stampedBlob = stampedBlob;
           item.stampedDocUrl = stampedDocUrl;
           item.stampedFileName = stampedFileName;
+          item.stampsOnlyBlob = stampsOnlyBlob;
+          item.stampsOnlyDocUrl = stampsOnlyDocUrl;
+          item.stampsOnlyFileName = stampsOnlyFileName;
           item.supabasePublicUrl = publicUrl;
+          item.supabaseStampsOnlyPublicUrl = stampsOnlyPublicUrl;
+
+          // Descarga automática del archivo paralelo "_SOLO_SELLOS.pdf" si la opción está activada
+          if (generateStampsOnlyPdfDoc && stampsOnlyDocUrl && stampsOnlyFileName) {
+            const autoLink = document.createElement('a');
+            autoLink.href = stampsOnlyDocUrl;
+            autoLink.download = stampsOnlyFileName;
+            document.body.appendChild(autoLink);
+            autoLink.click();
+            document.body.removeChild(autoLink);
+          }
         } catch (fileErr: any) {
           console.error(`Error al procesar ${item.name}:`, fileErr);
           item.status = 'error';
@@ -480,6 +526,9 @@ export default function FolioVisualEditor({
         if (item.stampedBlob) {
           zip.file(fileName, item.stampedBlob);
         }
+        if (item.stampsOnlyBlob && item.stampsOnlyFileName) {
+          zip.file(item.stampsOnlyFileName, item.stampsOnlyBlob);
+        }
       });
 
       const zipBlob = await zip.generateAsync({
@@ -520,7 +569,20 @@ export default function FolioVisualEditor({
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-      }, index * 350);
+
+        const stampsOnlyUrl = item.stampsOnlyDocUrl;
+        const stampsOnlyName = item.stampsOnlyFileName;
+        if (stampsOnlyUrl && stampsOnlyName) {
+          setTimeout(() => {
+            const sLink = document.createElement('a');
+            sLink.href = stampsOnlyUrl;
+            sLink.download = stampsOnlyName;
+            document.body.appendChild(sLink);
+            sLink.click();
+            document.body.removeChild(sLink);
+          }, 150);
+        }
+      }, index * 400);
     });
   };
 
@@ -530,6 +592,16 @@ export default function FolioVisualEditor({
     const link = document.createElement('a');
     link.href = item.stampedDocUrl;
     link.download = item.stampedFileName || `estampado_${item.name}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadStampsOnly = (item: ProcessedPdfItem) => {
+    if (!item.stampsOnlyDocUrl) return;
+    const link = document.createElement('a');
+    link.href = item.stampsOnlyDocUrl;
+    link.download = item.stampsOnlyFileName || `sellos_${item.name}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1977,6 +2049,36 @@ export default function FolioVisualEditor({
             </div>
           )}
 
+          {/* ── NUEVA OPCIÓN: GENERACIÓN PARALELA DOCUMENTO SOLO SELLOS ── */}
+          <div className="rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-50/80 to-amber-50/40 p-4 space-y-2.5 shadow-2xs">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-900 shrink-0 shadow-2xs">
+                  <Layers className="h-4 w-4" />
+                </div>
+                <div>
+                  <label
+                    htmlFor="toggle-parallel-stamps-only"
+                    className="text-xs font-bold text-slate-800 cursor-pointer select-none block"
+                  >
+                    Generar archivo paralelo con solo sellos/folios
+                  </label>
+                  <span className="text-[10px] text-amber-800 font-medium">Capa separada (_SOLO_SELLOS.pdf)</span>
+                </div>
+              </div>
+              <input
+                id="toggle-parallel-stamps-only"
+                type="checkbox"
+                checked={generateStampsOnlyPdfDoc}
+                onChange={e => setGenerateStampsOnlyPdfDoc(e.target.checked)}
+                className="h-4 w-4 rounded border-amber-300 text-[#581c2f] focus:ring-[#581c2f] cursor-pointer accent-[#581c2f]"
+              />
+            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed bg-white/85 rounded-xl p-2.5 border border-amber-200/60 shadow-2xs">
+              Crea un documento PDF adicional del mismo número de páginas donde solo aparecen los sellos estampados en sus posiciones exactas (páginas no seleccionadas quedarán en blanco).
+            </p>
+          </div>
+
           {/* BOTÓN PRINCIPAL: ESTAMPAR Y PERSISTIR */}
           <button
             type="button"
@@ -2159,6 +2261,21 @@ export default function FolioVisualEditor({
                           >
                             <Download className="h-3 w-3" />
                             <span>Descargar</span>
+                          </button>
+                        )}
+
+                        {item.stampsOnlyDocUrl && (
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleDownloadStampsOnly(item);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-amber-600 hover:bg-amber-700 px-2 py-0.5 text-white text-[10px] font-bold transition cursor-pointer shadow-2xs"
+                            title="Descargar archivo paralelo que contiene únicamente los sellos y folios"
+                          >
+                            <Layers className="h-3 w-3" />
+                            <span>Solo Sellos</span>
                           </button>
                         )}
 

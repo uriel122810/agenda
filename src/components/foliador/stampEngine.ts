@@ -233,14 +233,13 @@ export function getStandardFontName(fontChoice: FontChoice, isBold: boolean = fa
  * - Official "OPERADO" stamp with red date
  * - Custom logo image (scaled, rotated)
  */
-export async function stampSinglePdf(
-  sourceBytes: ArrayBuffer,
+async function applyStampsToPdfDocument(
+  pdfDoc: PDFDocument,
+  totalPages: number,
   settings: DocumentStampSettings,
   docIndex: number = 0,
   initialGlobalPageIndex: number = 0
-): Promise<{ modifiedBytes: Uint8Array; pageCount: number; pagesStamped: number }> {
-  const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
-  const totalPages = pdfDoc.getPageCount();
+): Promise<number> {
 
   // Resolve target indices for each element independently
   const operadoIndices = settings.operado.enabled
@@ -554,11 +553,110 @@ export async function stampSinglePdf(
     pageCounter++;
   }
 
-  const modifiedBytes = await pdfDoc.save();
+  return pageCounter;
+}
+
+/**
+ * Generates a secondary blank PDF matching the exact page count and dimensions
+ * of the source PDF, applying stamps ONLY on the selected pages at identical coordinates.
+ * Pages that were not selected remain 100% blank.
+ */
+export async function generateStampsOnlyPdf(
+  sourceBytes: ArrayBuffer,
+  settings: DocumentStampSettings,
+  docIndex: number = 0,
+  initialGlobalPageIndex: number = 0
+): Promise<{ modifiedBytes: Uint8Array; pageCount: number; pagesStamped: number }> {
+  const srcDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const totalPages = srcDoc.getPageCount();
+
+  const blankDoc = await PDFDocument.create();
+  for (let i = 0; i < totalPages; i++) {
+    const srcPage = srcDoc.getPage(i);
+    const { width, height } = srcPage.getSize();
+    const blankPage = blankDoc.addPage([width, height]);
+    const rot = srcPage.getRotation();
+    if (rot && rot.angle !== 0) {
+      blankPage.setRotation(rot);
+    }
+  }
+
+  const pagesStamped = await applyStampsToPdfDocument(
+    blankDoc,
+    totalPages,
+    settings,
+    docIndex,
+    initialGlobalPageIndex
+  );
+
+  const modifiedBytes = await blankDoc.save();
   return {
     modifiedBytes,
     pageCount: totalPages,
-    pagesStamped: pageCounter
+    pagesStamped
+  };
+}
+
+/**
+ * Core function to stamp a single PDF with all configured elements:
+ * - Folio text
+ * - Official "OPERADO" stamp with red date
+ * - Custom logo image (scaled, rotated)
+ * 
+ * If options.generateStampsOnly is true, also produces stampsOnlyBytes (secondary layer).
+ */
+export async function stampSinglePdf(
+  sourceBytes: ArrayBuffer,
+  settings: DocumentStampSettings,
+  docIndex: number = 0,
+  initialGlobalPageIndex: number = 0,
+  options?: { generateStampsOnly?: boolean }
+): Promise<{
+  modifiedBytes: Uint8Array;
+  stampsOnlyBytes?: Uint8Array;
+  pageCount: number;
+  pagesStamped: number;
+}> {
+  const pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const totalPages = pdfDoc.getPageCount();
+
+  const pagesStamped = await applyStampsToPdfDocument(
+    pdfDoc,
+    totalPages,
+    settings,
+    docIndex,
+    initialGlobalPageIndex
+  );
+  const modifiedBytes = await pdfDoc.save();
+
+  let stampsOnlyBytes: Uint8Array | undefined = undefined;
+  if (options?.generateStampsOnly) {
+    const blankDoc = await PDFDocument.create();
+    for (let i = 0; i < totalPages; i++) {
+      const srcPage = pdfDoc.getPage(i);
+      const { width, height } = srcPage.getSize();
+      const blankPage = blankDoc.addPage([width, height]);
+      const rot = srcPage.getRotation();
+      if (rot && rot.angle !== 0) {
+        blankPage.setRotation(rot);
+      }
+    }
+
+    await applyStampsToPdfDocument(
+      blankDoc,
+      totalPages,
+      settings,
+      docIndex,
+      initialGlobalPageIndex
+    );
+    stampsOnlyBytes = await blankDoc.save();
+  }
+
+  return {
+    modifiedBytes,
+    stampsOnlyBytes,
+    pageCount: totalPages,
+    pagesStamped
   };
 }
 

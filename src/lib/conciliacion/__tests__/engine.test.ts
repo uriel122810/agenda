@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import {
+  conciliarAutomatico,
+  conciliarManual,
+  construirReporte,
+  crearPeriodo,
+  desconciliar,
+  nuevoMovimiento,
+  parseMovimientosCsv,
+  procesarConciliacion,
+  saldoFinal,
+  totalesLado
+} from '../engine';
+import { crearPeriodoDemo } from '../demo';
+import { generarPdfReporteDetallado, generarPdfReporteGeneral } from '../pdf';
+
+async function run() {
+  console.log('🧪 Conciliación bancaria\n');
+
+  // 1. Automática sobre datos demo: concilia los 34 pares, deja partidas sueltas
+  const demo = crearPeriodoDemo();
+  const { periodo: auto, nuevos } = conciliarAutomatico(demo);
+  assert.equal(nuevos, 34, 'debe conciliar los 34 pares');
+  assert.equal(totalesLado(auto, 'libros').noConciliados, 4);
+  assert.equal(totalesLado(auto, 'banco').noConciliados, 4);
+  console.log('✓ conciliación automática 1 a 1');
+
+  // 2. El reporte cuadra: saldo banco ± partidas = saldo libros
+  const rep = construirReporte(auto);
+  assert.equal(rep.diferencia, 0, `diferencia esperada 0, obtenida ${rep.diferencia}`);
+  assert.equal(rep.secciones[0].movimientos.length, 2); // comisiones banco
+  assert.equal(rep.secciones[1].movimientos.length, 2); // depósitos en tránsito
+  assert.equal(rep.secciones[2].movimientos.length, 2); // intereses + abono no identificado
+  assert.equal(rep.secciones[3].movimientos.length, 2); // cheques en tránsito
+  console.log('✓ reporte general cuadra con saldo en libros');
+
+  // 3. Manual N a M con validación de importes
+  let p = crearPeriodo({ cuentaId: 'x', empresa: 'E', banco: 'B', cuenta: '1', fechaCorte: '2026-06-30', saldoInicialLibros: 0, saldoInicialBanco: 0 });
+  const l1 = nuevoMovimiento('libros', { fecha: '2026-06-02', concepto: 'Venta A', deposito: 100 }, 1);
+  const l2 = nuevoMovimiento('libros', { fecha: '2026-06-03', concepto: 'Venta B', deposito: 50 }, 1);
+  const b1 = nuevoMovimiento('banco', { fecha: '2026-06-04', concepto: 'Depósito agrupado', deposito: 150 }, 1);
+  const b2 = nuevoMovimiento('banco', { fecha: '2026-06-05', concepto: 'Comisión', retiro: 10 }, 1);
+  p = { ...p, movimientos: [l1, l2, b1, b2] };
+  assert.throws(() => conciliarManual(p, [l1.id], [b1.id]), /no cuadran/);
+  p = conciliarManual(p, [l1.id, l2.id], [b1.id]);
+  assert.equal(p.grupos.length, 1);
+  assert.equal(totalesLado(p, 'libros').conciliados, 2);
+  const sinGrupo = desconciliar(p, l2.id);
+  assert.equal(sinGrupo.grupos.length, 0);
+  assert.equal(totalesLado(sinGrupo, 'libros').conciliados, 0);
+  console.log('✓ conciliación manual N:M y des-conciliar');
+
+  // 4. Procesar: cierra, arrastra pendientes y el siguiente periodo sigue cuadrando
+  const { cerrado, siguiente } = procesarConciliacion(auto);
+  assert.equal(cerrado.estado, 'cerrado');
+  assert.throws(() => conciliarAutomatico(cerrado), /cerrado/);
+  assert.equal(siguiente.numero, 2);
+  assert.equal(siguiente.fechaCorte, '2026-07-31');
+  assert.equal(siguiente.movimientos.length, 8);
+  assert.ok(siguiente.movimientos.every(m => m.arrastrado && !m.conciliacionId));
+  assert.equal(siguiente.saldoInicialLibros, saldoFinal(auto, 'libros'));
+  assert.equal(siguiente.saldoInicialBanco, saldoFinal(auto, 'banco'));
+  assert.equal(construirReporte(siguiente).diferencia, 0);
+
+  // En julio el banco refleja el depósito en tránsito → al conciliarlo sigue cuadrando
+  const transito = siguiente.movimientos.find(m => m.origen === 'libros' && m.deposito === 28947.96)!;
+  const julio = {
+    ...siguiente,
+    movimientos: [...siguiente.movimientos, nuevoMovimiento('banco', { fecha: '2026-07-01', concepto: 'Depósito', deposito: 28947.96 }, 2)]
+  };
+  const julioAuto = conciliarAutomatico({ ...julio, criterios: { ...julio.criterios, toleranciaDias: 5 } }).periodo;
+  assert.ok(julioAuto.movimientos.find(m => m.id === transito.id)!.conciliacionId);
+  assert.equal(construirReporte(julioAuto).diferencia, 0);
+  console.log('✓ procesar conciliación: cierre irreversible + arrastre de pendientes');
+
+  // 5. Importación CSV (pegado desde Excel con tabulador y formato MX)
+  const csv = 'Fecha\tConcepto\tReferencia\tCargo\tAbono\n01/06/2026\tPago de nomina REF-11306\tREF-11306\t\t39,250.00\n02/06/2026\tCobro factura\t\t$12,500.50\t\nxx\tmala\t\t1\t';
+  const imp = parseMovimientosCsv(csv, 'libros', 1);
+  assert.equal(imp.movimientos.length, 2);
+  assert.equal(imp.movimientos[0].retiro, 39250);
+  assert.equal(imp.movimientos[1].deposito, 12500.5);
+  assert.equal(imp.movimientos[1].fecha, '2026-06-02');
+  assert.equal(imp.errores.length, 1);
+  const impBanco = parseMovimientosCsv('fecha,concepto,importe\n2026-06-03,Comision,-348\n2026-06-04,Interes,12.5', 'banco', 1);
+  assert.equal(impBanco.movimientos[0].retiro, 348);
+  assert.equal(impBanco.movimientos[1].deposito, 12.5);
+  console.log('✓ importación CSV / pegado desde Excel');
+
+  // 6. PDFs
+  const g = await generarPdfReporteGeneral(rep);
+  const d = await generarPdfReporteDetallado(rep);
+  assert.ok(g.length > 1000 && d.length > 1000);
+  console.log('✓ PDF general y detallado generados');
+
+  console.log('\n✅ Todas las pruebas pasaron');
+}
+
+run().catch(err => {
+  console.error('❌', err);
+  process.exit(1);
+});

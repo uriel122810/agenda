@@ -18,6 +18,7 @@ import AlegraGeneralPlaceholder from '@/components/alegra/AlegraGeneralPlacehold
 import AuditHistoryTable from '@/components/alegra/AuditHistoryTable';
 import NotificationDrawer from '@/components/alegra/NotificationDrawer';
 import DocumentFoliator from '@/components/foliador/DocumentFoliator';
+import ConciliacionBancaria from '@/components/conciliacion/ConciliacionBancaria';
 import { CheckCircle2, X } from 'lucide-react';
 
 interface Props {
@@ -155,6 +156,9 @@ export default function OverviewClient({ user, userRole, userName }: Props) {
           {currentTab === 'historial' && (
             <AuditHistoryTable searchQuery={globalSearchQuery} />
           )}
+
+          {/* Módulo 10: Conciliación bancaria (Libros vs Estado de cuenta) */}
+          {currentTab === 'conciliacion' && <ConciliacionBancaria searchQuery={globalSearchQuery} />}
 
           {/* Módulos secundarios: Ingresos, Gastos, Contactos, Inventario, Bancos, Contabilidad, Configuración */}
           {(currentTab === 'ingresos' ||

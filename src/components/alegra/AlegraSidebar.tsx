@@ -6,7 +6,7 @@ import {
   Receipt, ArrowDownCircle, ArrowUpCircle, Package, Landmark,
   Calculator, Flag, Sparkles, ChevronDown, ChevronRight,
   Stamp, HelpCircle, ExternalLink, Gift, Store, Globe,
-  TrendingUp, X, ChevronLeft, ShieldCheck, Mail, FileText
+  TrendingUp, X, ChevronLeft, ShieldCheck, Mail, FileText, ArrowLeftRight
 } from 'lucide-react';
 
 export type AlegraTabId =
@@ -22,6 +22,7 @@ export type AlegraTabId =
   | 'contactos'
   | 'inventario'
   | 'bancos'
+  | 'conciliacion'
   | 'contabilidad'
   | 'reportes'
   | 'historial'
@@ -310,6 +311,19 @@ export default function AlegraSidebar({
         >
           <Landmark size={18} className={isTabActive('bancos') ? 'text-[#581c2f]' : 'text-slate-400'} />
           {!isCollapsed && <span>Bancos</span>}
+        </button>
+
+        {/* Conciliación bancaria */}
+        <button
+          onClick={() => onSelectTab('conciliacion')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-medium transition-all ${
+            isTabActive('conciliacion')
+              ? 'bg-white text-[#581c2f] font-bold shadow-xs border-l-4 border-[#581c2f]'
+              : 'text-slate-600 hover:bg-[#FBF0F3]/60 hover:text-[#581c2f]'
+          }`}
+        >
+          <ArrowLeftRight size={18} className={isTabActive('conciliacion') ? 'text-[#581c2f]' : 'text-slate-400'} />
+          {!isCollapsed && <span>Conciliación bancaria</span>}
         </button>
 
         {/* Contabilidad */}

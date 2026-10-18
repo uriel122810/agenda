@@ -18,6 +18,7 @@ import { cargarRecursosNavegador, descargarArchivo } from '@/lib/conciliacion/as
 import { formatoDe, formatoPorDefecto, nombreArchivoOficial, type FormatoOficial } from '@/lib/conciliacion/formatoOficial';
 import { analizarAuxiliar, extraerTextoPdf } from '@/lib/conciliacion/importarAuxiliar';
 import { excelATexto } from '@/lib/conciliacion/importarExcel';
+import { analizarEstadoCuenta, type EstadoCuentaImportado } from '@/lib/conciliacion/importarEstadoCuenta';
 import { ModalFormato, VistaAuxiliar, VistaConciliacionOficial } from './FormatoOficial';
 import { fetchBancos, type CuentaBancariaRecord } from '@/lib/crudService';
 import { logAuditOperation } from '@/lib/auditService';
@@ -222,6 +223,20 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
       console.error(err);
       notificar(`No se pudo leer el auxiliar: ${(err as Error).message}`, true);
     }
+  };
+
+  /** Agrega los movimientos leídos del estado de cuenta en PDF (ya revisados en la vista previa) */
+  const onImportarEstadoCuenta = (r: EstadoCuentaImportado, usarSaldos: boolean, arrastrado: boolean) => {
+    const movs = r.movimientos.map(m => ({ ...m, arrastrado }));
+    aplicar(p => {
+      let nuevo = agregarMovimientos(p, movs);
+      if (usarSaldos && !arrastrado) {
+        if (r.saldoInicial !== undefined) nuevo = { ...nuevo, saldoInicialBanco: r.saldoInicial };
+        if (r.saldoFinal !== undefined) nuevo = { ...nuevo, saldoBancoCorte: r.saldoFinal };
+      }
+      return nuevo;
+    }, `Estado de cuenta importado: ${movs.length} movimientos · Abonos ${formatMoneda(r.totalAbonos)} · Cargos ${formatMoneda(r.totalCargos)}${r.saldoFinal !== undefined ? ` · Saldo final ${formatMoneda(r.saldoFinal)}` : ''}.`);
+    setModal(null);
   };
 
   const onImportarTexto = (texto: string, origen: Origen, arrastrado: boolean) => {
@@ -523,6 +538,9 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
           onCerrar={() => setModal(null)}
           onImportar={(texto, arrastrado) => onImportarTexto(texto, modal.origen, arrastrado)}
           onImportarAuxiliar={onImportarAuxiliar}
+          onImportarEstadoCuenta={onImportarEstadoCuenta}
+          fechaCorte={periodo.fechaCorte}
+          periodoNumero={periodo.numero}
           onError={msg => notificar(msg, true)}
         />
       )}
@@ -888,12 +906,18 @@ function ModalImportar({
   onCerrar,
   onImportar,
   onImportarAuxiliar,
+  onImportarEstadoCuenta,
+  fechaCorte,
+  periodoNumero,
   onError
 }: {
   origen: Origen;
   onCerrar: () => void;
   onImportar: (texto: string, arrastrado: boolean) => void;
   onImportarAuxiliar: (archivo: File, arrastrado: boolean) => Promise<void>;
+  onImportarEstadoCuenta: (r: EstadoCuentaImportado, usarSaldos: boolean, arrastrado: boolean) => void;
+  fechaCorte: string;
+  periodoNumero: number;
   onError: (msg: string) => void;
 }) {
   const [texto, setTexto] = useState('');
@@ -901,7 +925,106 @@ function ModalImportar({
   const [leyendo, setLeyendo] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const auxRef = useRef<HTMLInputElement>(null);
+  const ecRef = useRef<HTMLInputElement>(null);
+  const [vistaPrevia, setVistaPrevia] = useState<EstadoCuentaImportado | null>(null);
+  const [usarSaldos, setUsarSaldos] = useState(true);
   const esLibros = origen === 'libros';
+
+  const leerEstadoCuenta = async (f: File) => {
+    try {
+      setLeyendo(true);
+      const r = analizarEstadoCuenta(await extraerTextoPdf(await f.arrayBuffer()), { fechaCorte, periodoOrigen: periodoNumero });
+      if (r.movimientos.length === 0) onError(r.advertencias[0] ?? 'No se encontraron movimientos en el estado de cuenta.');
+      else setVistaPrevia(r);
+    } catch (err) {
+      onError(`No se pudo leer el estado de cuenta: ${(err as Error).message}`);
+    } finally {
+      setLeyendo(false);
+    }
+  };
+
+  /** Por si el banco presenta las columnas al revés: intercambia cargos y abonos */
+  const intercambiar = () =>
+    setVistaPrevia(v =>
+      v && {
+        ...v,
+        totalAbonos: v.totalCargos,
+        totalCargos: v.totalAbonos,
+        movimientos: v.movimientos.map(m => ({ ...m, deposito: m.retiro, retiro: m.deposito }))
+      }
+    );
+
+  if (vistaPrevia) {
+    const r = vistaPrevia;
+    return (
+      <Modal titulo="Vista previa del estado de cuenta" icono={<FileText className="h-5 w-5" />} onCerrar={onCerrar} ancho="max-w-4xl">
+        <div className="space-y-3 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {[
+              ['Movimientos', String(r.movimientos.length)],
+              ['Saldo inicial', r.saldoInicial !== undefined ? formatMoneda(r.saldoInicial) : '—'],
+              ['Abonos', formatMoneda(r.totalAbonos)],
+              ['Cargos', formatMoneda(r.totalCargos)],
+              ['Saldo final', r.saldoFinal !== undefined ? formatMoneda(r.saldoFinal) : '—']
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-xl border border-[#E8E2D9] px-3 py-2">
+                <p className="text-[10px] text-slate-500">{k}</p>
+                <p className="font-mono font-bold text-slate-900">{v}</p>
+              </div>
+            ))}
+          </div>
+          {r.advertencias.length > 0 ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 space-y-1">
+              {r.advertencias.map(a => (
+                <p key={a}>⚠ {a}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+              ✓ Los saldos cuadran: saldo inicial + abonos − cargos = saldo final{r.metodo === 'saldo' ? ' (cargos y abonos identificados con la variación del saldo)' : ''}.
+            </p>
+          )}
+          <div className="max-h-[340px] overflow-auto rounded-xl border border-[#E8E2D9]">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-[#FDFBF9] text-[11px] text-slate-500">
+                <tr>
+                  <th className="text-left px-2 py-1.5">Fecha</th>
+                  <th className="text-left px-2 py-1.5">Concepto</th>
+                  <th className="text-right px-2 py-1.5">Abono</th>
+                  <th className="text-right px-2 py-1.5">Cargo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.movimientos.map(m => (
+                  <tr key={m.id} className="border-t border-slate-100">
+                    <td className="px-2 py-1 font-mono whitespace-nowrap">{formatFecha(m.fecha)}</td>
+                    <td className="px-2 py-1">{m.concepto}</td>
+                    <td className="px-2 py-1 text-right font-mono">{m.deposito ? formatMoneda(m.deposito) : ''}</td>
+                    <td className="px-2 py-1 text-right font-mono">{m.retiro ? formatMoneda(m.retiro) : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!arrastrado && (r.saldoInicial !== undefined || r.saldoFinal !== undefined) && (
+            <label className="flex items-center gap-2 text-slate-700">
+              <input type="checkbox" checked={usarSaldos} onChange={e => setUsarSaldos(e.target.checked)} className="accent-[#581c2f]" />
+              Usar el saldo inicial y el saldo final de este estado de cuenta en la conciliación
+            </label>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-2">
+              <button onClick={() => setVistaPrevia(null)} className={btnSecundario}>Volver</button>
+              <button onClick={intercambiar} className={btnSecundario}>Intercambiar cargos y abonos</button>
+            </div>
+            <button onClick={() => onImportarEstadoCuenta(r, usarSaldos, arrastrado)} className={btnPrimario}>
+              <RefreshCw size={14} /> Importar {r.movimientos.length} movimientos
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   const cargarArchivo = async (f: File) => {
     try {
@@ -945,8 +1068,32 @@ function ModalImportar({
             </button>
           </div>
         )}
+        {!esLibros && (
+          <div className="rounded-xl border border-[#EED7DC] bg-[#FBF0F3] p-3 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <p className="font-bold text-[#581c2f]">Estado de cuenta del banco (PDF)</p>
+              <p className="text-slate-600">
+                Carga el estado de cuenta en PDF tal como lo descargas de la banca en línea. Se leen fechas, conceptos, cargos, abonos y saldos, y verás una vista previa antes de importar.
+              </p>
+            </div>
+            <input
+              ref={ecRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={async e => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) await leerEstadoCuenta(f);
+              }}
+            />
+            <button disabled={leyendo} onClick={() => ecRef.current?.click()} className={btnPrimario}>
+              <FileText size={14} /> {leyendo ? 'Leyendo…' : 'Estado de cuenta PDF'}
+            </button>
+          </div>
+        )}
         <p className="text-slate-600">
-          {esLibros ? 'O pega' : 'Pega'} las celdas copiadas de Excel, o carga un archivo Excel/CSV, con las columnas: <b>Fecha, Concepto, Referencia, {esLibros ? 'Cargo, Abono' : 'Abono (depósito), Cargo (retiro)'}</b>
+          {'O pega'} las celdas copiadas de Excel, o carga un archivo Excel/CSV, con las columnas: <b>Fecha, Concepto, Referencia, {esLibros ? 'Cargo, Abono' : 'Abono (depósito), Cargo (retiro)'}</b>
           {esLibros && <> y, opcionalmente, <b>Póliza, Cheque, Beneficiario</b></>}. También se acepta una sola columna <b>Importe</b> (positivo = depósito, negativo = retiro). Fechas DD/MM/AAAA o AAAA-MM-DD.
         </p>
         <textarea

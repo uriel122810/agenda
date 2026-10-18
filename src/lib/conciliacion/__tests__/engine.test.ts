@@ -8,11 +8,18 @@ import {
   nuevoMovimiento,
   parseMovimientosCsv,
   procesarConciliacion,
+  round2,
   saldoFinal,
   totalesLado
 } from '../engine';
 import { crearPeriodoDemo } from '../demo';
-import { generarPdfReporteDetallado, generarPdfReporteGeneral } from '../pdf';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { construirHojaConciliacion } from '../hojaOficial';
+import { nombreArchivoOficial, formatoPorDefecto } from '../formatoOficial';
+import { generarExcelConciliacion } from '../excelOficial';
+import { generarPdfAuxiliar, generarPdfConciliacionOficial, renglonesConcepto } from '../pdfOficial';
+import { analizarAuxiliar, extraerConPdfjs } from '../importarAuxiliar';
 
 async function run() {
   console.log('🧪 Conciliación bancaria\n');
@@ -86,11 +93,60 @@ async function run() {
   assert.equal(impBanco.movimientos[1].deposito, 12.5);
   console.log('✓ importación CSV / pegado desde Excel');
 
-  // 6. PDFs
-  const g = await generarPdfReporteGeneral(rep);
-  const d = await generarPdfReporteDetallado(rep);
-  assert.ok(g.length > 1000 && d.length > 1000);
-  console.log('✓ PDF general y detallado generados');
+  // 6. Formato oficial: hoja, Excel, PDF de conciliación y auxiliar
+  const pub = join(process.cwd(), 'public', 'conciliacion');
+  const recursos = {
+    logoAyuntamiento: new Uint8Array(readFileSync(join(pub, 'logo-ayuntamiento.png'))),
+    logoLaPaz: new Uint8Array(readFileSync(join(pub, 'logo-lapaz.png'))),
+    logoAuxiliar: new Uint8Array(readFileSync(join(pub, 'logo-auxiliar.png'))),
+    fuenteCalibri: new Uint8Array(readFileSync(join(pub, 'Carlito-Regular.ttf')))
+  };
+  const oficial = {
+    ...auto,
+    formato: {
+      ...formatoPorDefecto(auto),
+      nombreCuenta: 'BANAMEX PARTICIPACIONES',
+      bancoCorto: 'BANAMEX',
+      numeroCuenta: '01600731234',
+      cuentaContable: '1112-15-0-0-01'
+    },
+    movimientos: auto.movimientos.map((m, i) => (m.origen === 'libros' ? { ...m, poliza: `E-${i + 1}`, mov: String((i % 3) + 1) } : m))
+  };
+  const hoja = construirHojaConciliacion(oficial);
+  const celdas = hoja.filas.flatMap((f, i) => f.celdas.map(c => ({ ...c, fila: i + 1 })));
+  const buscar = (t: string) => celdas.find(c => c.texto === t);
+  assert.ok(buscar('CONCILIACIÓN BANCARIA'));
+  assert.ok(buscar('CHEQUES EN TRÁNSITO'));
+  const saldoLibros = celdas.find(c => c.texto?.startsWith('SALDO SEGÚN LIBROS AL 30 DE JUNIO DE 2026'))!;
+  const totalLibros = celdas.find(c => c.fila === saldoLibros.fila && c.col === 5)!;
+  assert.equal(totalLibros.numero, rep.saldoConciliado);
+  assert.match(totalLibros.formula!, /^\+F\d+-F\d+\+F\d+$/);
+  assert.equal(nombreArchivoOficial(oficial, 'CONC'), '01_26_06_CONC_BANAMEX_1234_PARTICIPACIONES');
+  const xlsx = await generarExcelConciliacion(oficial, recursos);
+  const pdfConc = await generarPdfConciliacionOficial(oficial, recursos);
+  const pdfAux = await generarPdfAuxiliar(oficial, recursos);
+  assert.ok(xlsx.length > 5000 && pdfConc.length > 5000 && pdfAux.length > 2000);
+  console.log('✓ formato oficial: Excel, PDF de conciliación y auxiliar');
+
+  // 7. Justificado del concepto del auxiliar (90 caracteres, como el sistema contable)
+  const r = renglonesConcepto('PAGO DE FACT. 497 DE GRUPO CONSTRUCTOR RODJIM, S.A. DE C.V. TRASLADO DE RESIDUOS SOLIDOS EN GONDOLA DE 36 MTS. CUBICOS');
+  assert.equal(r.length, 2);
+  const ultimo = r[0][r[0].length - 1];
+  assert.ok(Math.abs(ultimo.x + ultimo.t.length * 3.6 - 324) < 0.01, 'el primer renglón llega al ancho completo');
+  console.log('✓ justificado de conceptos del auxiliar');
+
+  // 8. Ida y vuelta: el auxiliar generado se vuelve a importar con los mismos datos
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfAux), verbosity: 0 }).promise;
+  const leido = analizarAuxiliar(await extraerConPdfjs(doc as never));
+  const libros = oficial.movimientos.filter(m => m.origen === 'libros' && !m.arrastrado);
+  assert.equal(leido.movimientos.length, libros.length);
+  assert.equal(leido.totalDebe, round2(libros.reduce((a, m) => a + m.deposito, 0)));
+  assert.equal(leido.totalHaber, round2(libros.reduce((a, m) => a + m.retiro, 0)));
+  assert.equal(leido.saldoInicial, oficial.saldoInicialLibros);
+  assert.equal(leido.fechaCorte, '2026-06-30');
+  assert.deepEqual(leido.advertencias, []);
+  console.log('✓ importación del auxiliar en PDF (ida y vuelta)');
 
   console.log('\n✅ Todas las pruebas pasaron');
 }

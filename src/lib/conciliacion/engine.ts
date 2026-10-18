@@ -30,6 +30,24 @@ export interface Movimiento {
   arrastrado: boolean;
   /** Número de conciliación donde se originó */
   periodoOrigen: number;
+  /** Póliza contable (ej. I-30, E-3, D-27) — sólo Libros */
+  poliza?: string;
+  /** Número de movimiento dentro de la póliza (columna MOV del auxiliar) */
+  mov?: string;
+  /** Número de cheque (cheques en tránsito) */
+  cheque?: string;
+  /** Beneficiario del cheque / transferencia */
+  beneficiario?: string;
+  /**
+   * Renglones del concepto tal como vienen en el auxiliar del sistema contable, con la posición
+   * exacta de cada fragmento (x en pt desde la columna de concepto), para reimprimirlo idéntico.
+   */
+  conceptoRenglones?: SegmentoConcepto[][];
+}
+
+export interface SegmentoConcepto {
+  x: number;
+  t: string;
 }
 
 export interface GrupoConciliacion {
@@ -79,6 +97,14 @@ export interface PeriodoConciliacion {
   grupos: GrupoConciliacion[];
   criterios: CriteriosConciliacion;
   cierre?: ResumenCierre;
+  /**
+   * Saldo según estado de cuenta bancario capturado a mano. Si existe, sustituye
+   * al calculado (saldo inicial banco + movimientos), útil cuando sólo se capturan
+   * las partidas pendientes y no el estado de cuenta completo.
+   */
+  saldoBancoCorte?: number;
+  /** Datos del formato oficial (encabezados, firmas, jerarquía de cuentas) */
+  formato?: import('./formatoOficial').FormatoOficial;
   created_at: string;
 }
 
@@ -140,6 +166,7 @@ export function crearPeriodo(params: {
   numero?: number;
   movimientos?: Movimiento[];
   criterios?: CriteriosConciliacion;
+  formato?: PeriodoConciliacion['formato'];
 }): PeriodoConciliacion {
   return {
     id: uid('conc'),
@@ -155,15 +182,28 @@ export function crearPeriodo(params: {
     movimientos: params.movimientos ?? [],
     grupos: [],
     criterios: params.criterios ?? { ...CRITERIOS_DEFAULT },
+    formato: params.formato,
     created_at: new Date().toISOString()
   };
 }
 
 export function nuevoMovimiento(
   origen: Origen,
-  data: { fecha: string; concepto: string; referencia?: string; deposito?: number; retiro?: number },
+  data: {
+    fecha: string;
+    concepto: string;
+    referencia?: string;
+    deposito?: number;
+    retiro?: number;
+    poliza?: string;
+    mov?: string;
+    cheque?: string;
+    beneficiario?: string;
+    arrastrado?: boolean;
+  },
   periodoOrigen: number
 ): Movimiento {
+  const opt = (v?: string) => (v && v.trim() ? v.trim() : undefined);
   return {
     id: uid(origen === 'libros' ? 'lib' : 'ban'),
     origen,
@@ -173,8 +213,12 @@ export function nuevoMovimiento(
     deposito: round2(Math.abs(data.deposito ?? 0)),
     retiro: round2(Math.abs(data.retiro ?? 0)),
     conciliacionId: null,
-    arrastrado: false,
-    periodoOrigen
+    arrastrado: !!data.arrastrado,
+    periodoOrigen,
+    poliza: opt(data.poliza),
+    mov: opt(data.mov),
+    cheque: opt(data.cheque),
+    beneficiario: opt(data.beneficiario)
   };
 }
 
@@ -352,6 +396,7 @@ export function totalesLado(p: PeriodoConciliacion, origen: Origen): TotalesLado
 
 /** Saldo final = saldo inicial + movimientos propios del periodo (los arrastrados ya afectaron su periodo) */
 export function saldoFinal(p: PeriodoConciliacion, origen: Origen): number {
+  if (origen === 'banco' && typeof p.saldoBancoCorte === 'number') return round2(p.saldoBancoCorte);
   const inicial = origen === 'libros' ? p.saldoInicialLibros : p.saldoInicialBanco;
   return round2(
     inicial + p.movimientos.filter(m => m.origen === origen && !m.arrastrado).reduce((a, m) => a + neto(m), 0)
@@ -384,27 +429,29 @@ export interface ReporteConciliacion {
 }
 
 /**
- * Parte del saldo según estado de cuenta y llega al saldo según libros:
- *   Saldo banco
- *   (+) Cargos del banco no correspondidos en libros     (retiros del banco pendientes)
- *   (+) Cargos en libros no correspondidos en bancos     (depósitos en tránsito)
- *   (-) Abonos del banco no correspondidos en libros     (depósitos del banco pendientes)
- *   (-) Abonos en libros no correspondidos en bancos     (cheques / pagos en tránsito)
- *   = Saldo conciliado (debe igualar el saldo en libros)
+ * Formato oficial: parte del saldo según estado de cuenta y llega al saldo según libros:
+ *   Saldo según estado de cuenta bancario
+ *   (-) Abonos de contabilidad no correspondidos por el banco   (cheques en tránsito)
+ *   (+) Cargos de contabilidad no correspondidos por el banco   (depósitos en tránsito)
+ *   = Subtotal
+ *   (-) Abonos del banco no correspondidos en contabilidad
+ *   (+) Cargos del banco no correspondidos en contabilidad
+ *   = Saldo según libros
  */
 export function construirReporte(p: PeriodoConciliacion): ReporteConciliacion {
   const pend = p.movimientos
     .filter(m => !m.conciliacionId)
-    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.concepto.localeCompare(b.concepto));
+    .sort((a, b) => a.fecha.localeCompare(b.fecha)); // estable: respeta el orden de captura en la misma fecha
   const sec = (signo: '+' | '-', titulo: string, filtro: (m: Movimiento) => boolean, campo: 'deposito' | 'retiro'): SeccionReporte => {
     const movimientos = pend.filter(m => filtro(m) && m[campo] > 0);
     return { signo, titulo, campo, movimientos, total: round2(movimientos.reduce((a, m) => a + m[campo], 0)) };
   };
+  // Orden y redacción del formato oficial de conciliación bancaria
   const secciones: SeccionReporte[] = [
-    sec('+', 'Cargos del banco no correspondidos en libros', m => m.origen === 'banco', 'retiro'),
-    sec('+', 'Cargos en libros no correspondidos en bancos', m => m.origen === 'libros', 'deposito'),
-    sec('-', 'Abonos del banco no correspondidos en libros', m => m.origen === 'banco', 'deposito'),
-    sec('-', 'Abonos en libros no correspondidos en bancos', m => m.origen === 'libros', 'retiro')
+    sec('-', 'Abonos de contabilidad no correspondidos por el banco', m => m.origen === 'libros', 'retiro'),
+    sec('+', 'Cargos de contabilidad no correspondidos por el banco', m => m.origen === 'libros', 'deposito'),
+    sec('-', 'Abonos del banco no correspondidos en contabilidad', m => m.origen === 'banco', 'deposito'),
+    sec('+', 'Cargos del banco no correspondidos en contabilidad', m => m.origen === 'banco', 'retiro')
   ];
   const saldoBanco = saldoFinal(p, 'banco');
   const saldoLibros = saldoFinal(p, 'libros');
@@ -461,6 +508,7 @@ export function procesarConciliacion(p: PeriodoConciliacion): { cerrado: Periodo
     saldoInicialLibros: saldoFinalLibros,
     saldoInicialBanco: saldoFinalBanco,
     criterios: { ...p.criterios },
+    formato: p.formato ? { ...p.formato, fechaElaboracion: undefined } : undefined,
     movimientos: pendientes.map(m => ({
       ...m,
       id: uid(m.origen === 'libros' ? 'lib' : 'ban'),
@@ -520,7 +568,8 @@ function splitCsvLine(line: string, sep: string): string[] {
 export function parseMovimientosCsv(
   texto: string,
   origen: Origen,
-  periodoOrigen: number
+  periodoOrigen: number,
+  opciones?: { arrastrado?: boolean }
 ): { movimientos: Movimiento[]; errores: string[] } {
   const lineas = texto.split(/\r?\n/).filter(l => l.trim());
   if (lineas.length === 0) return { movimientos: [], errores: ['El archivo está vacío.'] };
@@ -534,14 +583,20 @@ export function parseMovimientosCsv(
     return tieneHeader ? i : def;
   };
   // En libros: cargo = depósito; en banco: abono = depósito
-  const reDep = origen === 'libros' ? /deposito|cargo|entrada|ingreso/ : /deposito|abono|entrada|ingreso/;
-  const reRet = origen === 'libros' ? /retiro|abono|salida|egreso/ : /retiro|cargo|salida|egreso/;
+  const reDep = origen === 'libros' ? /deposito|cargo|debe|entrada|ingreso/ : /deposito|abono|entrada|ingreso/;
+  const reRet = origen === 'libros' ? /retiro|abono|haber|salida|egreso/ : /retiro|cargo|salida|egreso/;
   const iFecha = idx(/fecha/, 0);
   const iConcepto = idx(/concepto|descrip/, 1);
   const iRef = idx(/refer/, 2);
   const iDep = idx(reDep, 3);
   const iRet = idx(reRet, 4);
   const iImporte = tieneHeader ? header.findIndex(h => /^importe|^monto/.test(h)) : -1;
+  const opcional = (re: RegExp) => (tieneHeader ? header.findIndex(h => re.test(h)) : -1);
+  const iPoliza = opcional(/poliza|^pol$/);
+  const iMov = opcional(/^mov/);
+  const iCheque = opcional(/cheque/);
+  const iBenef = opcional(/beneficiario/);
+  const col = (i: number, cols: string[]) => (i >= 0 ? cols[i] : undefined);
 
   const movimientos: Movimiento[] = [];
   const errores: string[] = [];
@@ -567,7 +622,18 @@ export function parseMovimientosCsv(
     movimientos.push(
       nuevoMovimiento(
         origen,
-        { fecha, concepto: cols[iConcepto] || '(sin concepto)', referencia: iRef >= 0 ? cols[iRef] : '', deposito: dep, retiro: ret },
+        {
+          fecha,
+          concepto: cols[iConcepto] || '(sin concepto)',
+          referencia: iRef >= 0 ? cols[iRef] : '',
+          deposito: dep,
+          retiro: ret,
+          poliza: col(iPoliza, cols),
+          mov: col(iMov, cols),
+          cheque: col(iCheque, cols),
+          beneficiario: col(iBenef, cols),
+          arrastrado: opciones?.arrastrado
+        },
         periodoOrigen
       )
     );

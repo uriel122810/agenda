@@ -13,14 +13,26 @@ import {
   type PeriodoConciliacion, type ReporteConciliacion
 } from '@/lib/conciliacion/engine';
 import { deleteConciliacion, fetchConciliaciones, saveConciliaciones } from '@/lib/conciliacion/store';
-import { generarPdfReporteDetallado, generarPdfReporteGeneral } from '@/lib/conciliacion/pdf';
 import { crearPeriodoDemo } from '@/lib/conciliacion/demo';
-import { downloadPdfBlob } from '@/lib/pdfReportGenerator';
+import { cargarRecursosNavegador, descargarArchivo } from '@/lib/conciliacion/assets';
+import { formatoDe, formatoPorDefecto, nombreArchivoOficial, type FormatoOficial } from '@/lib/conciliacion/formatoOficial';
+import { analizarAuxiliar, extraerTextoPdf } from '@/lib/conciliacion/importarAuxiliar';
+import { excelATexto } from '@/lib/conciliacion/importarExcel';
+import { ModalFormato, VistaAuxiliar, VistaConciliacionOficial } from './FormatoOficial';
 import { fetchBancos, type CuentaBancariaRecord } from '@/lib/crudService';
 import { logAuditOperation } from '@/lib/auditService';
 
 type Filtro = 'todos' | 'conciliados' | 'pendientes';
-type Vista = 'seguimiento' | 'general' | 'detallado';
+type Vista = 'seguimiento' | 'conciliacion' | 'auxiliar';
+const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/** "1112 0015 0000 0000 0001" → "1112-15-0-0-01" */
+const cuentaContableDesdeCodigo = (codigo: string) =>
+  codigo
+    .trim()
+    .split(/\s+/)
+    .map((g, i) => (i === 0 ? g : String(Number(g)).padStart(i === 4 ? 2 : 1, '0')))
+    .join('-');
 
 const inputCls =
   'w-full rounded-xl border border-slate-200 p-2.5 text-slate-800 bg-white focus:border-[#581c2f] focus:outline-none focus:ring-1 focus:ring-[#581c2f]';
@@ -44,7 +56,8 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
   const [sel, setSel] = useState<Record<Origen, Set<string>>>({ libros: new Set(), banco: new Set() });
   const [grupoResaltado, setGrupoResaltado] = useState<string | null>(null);
 
-  const [modal, setModal] = useState<null | 'nueva' | 'criterios' | 'procesar' | { tipo: 'importar' | 'agregar'; origen: Origen }>(null);
+  const [modal, setModal] = useState<null | 'nueva' | 'criterios' | 'procesar' | 'formato' | { tipo: 'importar' | 'agregar'; origen: Origen }>(null);
+  const [generando, setGenerando] = useState<null | 'excel' | 'pdf' | 'auxiliar'>(null);
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
 
   const notificar = (msg: string, error = false) => {
@@ -147,13 +160,101 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
     }
   };
 
-  const onPdf = async (tipo: 'general' | 'detallado') => {
-    if (!reporte) return;
-    const bytes = tipo === 'general' ? await generarPdfReporteGeneral(reporte) : await generarPdfReporteDetallado(reporte);
-    downloadPdfBlob(bytes, `Conciliacion_${tipo === 'general' ? 'General' : 'Detallado'}_${reporte.banco}_${reporte.cuenta}_No${reporte.numero}`.replace(/\s+/g, '_'));
+  /** Descarga la conciliación (Excel o PDF) o el auxiliar en PDF con el formato oficial */
+  const descargar = async (tipo: 'excel' | 'pdf' | 'auxiliar') => {
+    if (!periodo || generando) return;
+    setGenerando(tipo);
+    try {
+      const recursos = await cargarRecursosNavegador();
+      if (tipo === 'excel') {
+        const { generarExcelConciliacion } = await import('@/lib/conciliacion/excelOficial');
+        const datos = await generarExcelConciliacion(periodo, recursos);
+        descargarArchivo(datos, `${nombreArchivoOficial(periodo, 'CONC')}.xlsx`, MIME_XLSX);
+      } else {
+        const pdf = await import('@/lib/conciliacion/pdfOficial');
+        const datos = tipo === 'pdf' ? await pdf.generarPdfConciliacionOficial(periodo, recursos) : await pdf.generarPdfAuxiliar(periodo, recursos);
+        descargarArchivo(datos, `${nombreArchivoOficial(periodo, tipo === 'pdf' ? 'CONC' : 'AUX')}.pdf`, 'application/pdf');
+      }
+    } catch (err) {
+      console.error(err);
+      notificar(`No se pudo generar el archivo: ${(err as Error).message}`, true);
+    } finally {
+      setGenerando(null);
+    }
   };
 
-  const onCrear = (nuevo: PeriodoConciliacion) => {
+  /** Importa el reporte "Auxiliares del mes" (PDF del sistema contable) como movimientos de Libros */
+  const onImportarAuxiliar = async (archivo: File, arrastrado: boolean) => {
+    if (!periodo) return;
+    try {
+      const aux = analizarAuxiliar(await extraerTextoPdf(await archivo.arrayBuffer()), periodo.numero);
+      if (aux.movimientos.length === 0) throw new Error(aux.advertencias[0] ?? 'No se encontraron movimientos en el auxiliar.');
+      if (
+        aux.fechaCorte &&
+        aux.fechaCorte !== periodo.fechaCorte &&
+        !confirm(`El auxiliar es al ${formatFecha(aux.fechaCorte)} y esta conciliación tiene corte al ${formatFecha(periodo.fechaCorte)}. ¿Importarlo de todos modos?`)
+      )
+        return;
+      const existentes = periodo.movimientos.filter(m => m.origen === 'libros' && !m.arrastrado);
+      const reemplazar =
+        existentes.length > 0 &&
+        confirm(`Ya hay ${existentes.length} movimientos de Libros en este periodo. ¿Reemplazarlos por los del auxiliar?\n\nAceptar = reemplazar · Cancelar = agregarlos`);
+      const movs = aux.movimientos.map(m => ({ ...m, arrastrado }));
+      aplicar(p => {
+        let base = p;
+        if (reemplazar) for (const m of existentes) base = eliminarMovimiento(base, m.id);
+        const f = formatoDe(base);
+        const detalle = aux.jerarquia[aux.jerarquia.length - 1];
+        return {
+          ...agregarMovimientos(base, movs),
+          saldoInicialLibros: arrastrado ? base.saldoInicialLibros : aux.saldoInicial,
+          formato: {
+            ...f,
+            entidad: aux.entidad || f.entidad,
+            jerarquia: aux.jerarquia.length ? aux.jerarquia : f.jerarquia,
+            cuentaContable: f.cuentaContable || (detalle ? cuentaContableDesdeCodigo(detalle.codigo) : '')
+          }
+        };
+      }, `Auxiliar importado: ${aux.movimientos.length} movimientos · Debe ${formatMoneda(aux.totalDebe)} · Haber ${formatMoneda(aux.totalHaber)} · Saldo final ${formatMoneda(aux.saldoFinal)}.`);
+      if (aux.advertencias.length) setTimeout(() => notificar(aux.advertencias.join(' '), true), 4600);
+      setModal(null);
+    } catch (err) {
+      console.error(err);
+      notificar(`No se pudo leer el auxiliar: ${(err as Error).message}`, true);
+    }
+  };
+
+  const onImportarTexto = (texto: string, origen: Origen, arrastrado: boolean) => {
+    if (!periodo) return;
+    const { movimientos, errores } = parseMovimientosCsv(texto, origen, periodo.numero, { arrastrado });
+    if (movimientos.length === 0) {
+      notificar(errores[0] ?? 'No se encontraron movimientos.', true);
+      return;
+    }
+    aplicar(
+      p => agregarMovimientos(p, movimientos),
+      `${movimientos.length} movimientos importados a ${origen === 'libros' ? 'Libros' : 'Banco'}${errores.length ? ` (${errores.length} filas omitidas)` : ''}.`
+    );
+    setModal(null);
+  };
+
+  const onGuardarFormato = (f: FormatoOficial, saldoBancoCorte: number | undefined) => {
+    aplicar(p => {
+      if (p.estado !== 'abierto') throw new Error('El periodo está cerrado y no puede modificarse.');
+      const { saldoBancoCorte: _omit, ...resto } = p;
+      void _omit;
+      return saldoBancoCorte === undefined ? { ...resto, formato: f } : { ...resto, formato: f, saldoBancoCorte };
+    }, 'Datos del formato guardados.');
+    setModal(null);
+  };
+
+  const onCrear = (nuevoBase: PeriodoConciliacion) => {
+    // Hereda los datos del formato (firmas, encabezados, jerarquía) del último periodo de la misma cuenta
+    const previo = periodos.filter(p => p.cuentaId === nuevoBase.cuentaId && p.formato).sort((a, b) => b.numero - a.numero)[0];
+    const nuevo: PeriodoConciliacion = {
+      ...nuevoBase,
+      formato: nuevoBase.formato ?? (previo?.formato ? { ...previo.formato, fechaElaboracion: undefined } : formatoPorDefecto(nuevoBase))
+    };
     setPeriodos(prev => [...prev, nuevo]);
     void saveConciliaciones([nuevo]);
     setCuentaId(nuevo.cuentaId);
@@ -225,7 +326,7 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
             )}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Concilia Libros contra el Estado de Cuenta, cierra el periodo arrastrando pendientes y genera los reportes General y Detallado.
+            Concilia Libros contra el Estado de Cuenta, cierra el periodo arrastrando pendientes y genera la conciliación y el auxiliar en el formato oficial (Excel y PDF).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -270,6 +371,7 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
             <Grupo titulo="Datos">
               <button disabled={cerrado} onClick={() => setModal({ tipo: 'importar', origen: 'libros' })} className={btnSecundario}><Upload size={14} /> Importar Libros</button>
               <button disabled={cerrado} onClick={() => setModal({ tipo: 'importar', origen: 'banco' })} className={btnSecundario}><Upload size={14} /> Importar Banco</button>
+              <button disabled={cerrado} onClick={() => setModal('formato')} className={btnSecundario}><Settings2 size={14} /> Datos del formato</button>
             </Grupo>
             <Grupo titulo="Acciones">
               <button disabled={cerrado} onClick={onAutomatica} className={btnSecundario}><Wand2 size={14} /> Conciliación automática</button>
@@ -279,9 +381,16 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
             <Grupo titulo="Proceso">
               <button disabled={cerrado} onClick={() => setModal('procesar')} className={btnPrimario}><Lock size={14} /> Procesar conciliación</button>
             </Grupo>
-            <Grupo titulo="Reportes">
-              <button onClick={() => onPdf('general')} className={btnSecundario}><Download size={14} /> PDF General</button>
-              <button onClick={() => onPdf('detallado')} className={btnSecundario}><Download size={14} /> PDF Detallado</button>
+            <Grupo titulo="Formato oficial">
+              <button disabled={!!generando} onClick={() => descargar('excel')} className={btnSecundario}>
+                <FileSpreadsheet size={14} /> {generando === 'excel' ? 'Generando…' : 'Conciliación Excel'}
+              </button>
+              <button disabled={!!generando} onClick={() => descargar('pdf')} className={btnSecundario}>
+                <Download size={14} /> {generando === 'pdf' ? 'Generando…' : 'Conciliación PDF'}
+              </button>
+              <button disabled={!!generando} onClick={() => descargar('auxiliar')} className={btnSecundario}>
+                <FileText size={14} /> {generando === 'auxiliar' ? 'Generando…' : 'Auxiliar PDF'}
+              </button>
             </Grupo>
             {!cerrado && (
               <button onClick={onEliminarPeriodo} title="Eliminar conciliación" className="ml-auto p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50">
@@ -306,8 +415,8 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
           <div className="flex gap-1 border-b border-[#E8E2D9]">
             {([
               ['seguimiento', 'Seguimiento'],
-              ['general', 'Reporte General'],
-              ['detallado', 'Reporte Detallado']
+              ['conciliacion', 'Conciliación (formato oficial)'],
+              ['auxiliar', 'Auxiliar del mes']
             ] as const).map(([id, label]) => (
               <button
                 key={id}
@@ -373,7 +482,15 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
             </>
           )}
 
-          {vista !== 'seguimiento' && reporte && <VistaReporte reporte={reporte} detallado={vista === 'detallado'} onPdf={() => onPdf(vista)} />}
+          {vista === 'conciliacion' && (
+            <VistaConciliacionOficial
+              periodo={periodo}
+              onExcel={() => descargar('excel')}
+              onPdf={() => descargar('pdf')}
+              onFormato={cerrado ? undefined : () => setModal('formato')}
+            />
+          )}
+          {vista === 'auxiliar' && <VistaAuxiliar periodo={periodo} onPdf={() => descargar('auxiliar')} />}
         </>
       )}
 
@@ -397,22 +514,16 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
       {modal === 'procesar' && periodo && (
         <ModalProcesar periodo={periodo} reporte={reporte!} onCerrar={() => setModal(null)} onConfirmar={onProcesar} />
       )}
+      {modal === 'formato' && periodo && (
+        <ModalFormato periodo={periodo} onCerrar={() => setModal(null)} onGuardar={onGuardarFormato} />
+      )}
       {modal && typeof modal === 'object' && modal.tipo === 'importar' && periodo && (
         <ModalImportar
           origen={modal.origen}
           onCerrar={() => setModal(null)}
-          onImportar={texto => {
-            const { movimientos, errores } = parseMovimientosCsv(texto, modal.origen, periodo.numero);
-            if (movimientos.length === 0) {
-              notificar(errores[0] ?? 'No se encontraron movimientos.', true);
-              return;
-            }
-            aplicar(
-              p => agregarMovimientos(p, movimientos),
-              `${movimientos.length} movimientos importados a ${modal.origen === 'libros' ? 'Libros' : 'Banco'}${errores.length ? ` (${errores.length} filas omitidas)` : ''}.`
-            );
-            setModal(null);
-          }}
+          onImportar={(texto, arrastrado) => onImportarTexto(texto, modal.origen, arrastrado)}
+          onImportarAuxiliar={onImportarAuxiliar}
+          onError={msg => notificar(msg, true)}
         />
       )}
       {modal && typeof modal === 'object' && modal.tipo === 'agregar' && periodo && (
@@ -598,77 +709,6 @@ function PanelMovimientos(props: {
   );
 }
 
-function VistaReporte({ reporte, detallado, onPdf }: { reporte: ReporteConciliacion; detallado: boolean; onPdf: () => void }) {
-  const cuadra = Math.abs(reporte.diferencia) < 0.005;
-  return (
-    <div className="rounded-2xl border border-[#E8E2D9] bg-white shadow-xs">
-      <div className="flex justify-end p-3 border-b border-[#E8E2D9]">
-        <button onClick={onPdf} className={btnSecundario}><FileText size={14} /> Exportar a PDF</button>
-      </div>
-      <div className="max-w-3xl mx-auto px-6 py-8 text-sm">
-        <div className="text-center space-y-0.5 mb-6">
-          <p className="font-bold text-[#581c2f] text-base">{reporte.empresa}</p>
-          <p className="font-semibold">Conciliación al: {formatFecha(reporte.fechaCorte)}</p>
-          <p className="font-semibold">{reporte.banco} {reporte.cuenta}</p>
-          <p className="font-bold">{detallado ? 'Reporte Detallado de Conciliación' : 'Reporte General de Conciliación'}</p>
-          <p className="text-xs text-slate-500">Conciliación No. {reporte.numero} - {reporte.periodo}</p>
-        </div>
-
-        <FilaReporte etiqueta="Saldo según estado de cuenta" valor={reporte.saldoBanco} fuerte />
-        {reporte.secciones.map(s => (
-          <div key={s.titulo} className="mt-3">
-            <div className={`flex items-baseline gap-3 ${detallado ? 'bg-[#FDFBF9] rounded-lg px-2 py-1.5' : 'px-2 py-1'}`}>
-              <span className="font-mono font-bold text-[#581c2f] w-8">({s.signo})</span>
-              <span className={`flex-1 ${detallado ? 'font-semibold' : ''}`}>{s.titulo}</span>
-              {!detallado && <span className="text-xs text-slate-400">{s.movimientos.length} mov.</span>}
-              {!detallado && <span className="font-mono tabular-nums w-32 text-right">{formatMoneda(s.total)}</span>}
-            </div>
-            {detallado && (
-              <div className="pl-12 pr-2">
-                {s.movimientos.length === 0 && <p className="text-xs text-slate-400 py-1.5">Sin partidas pendientes.</p>}
-                {s.movimientos.map(m => (
-                  <div key={m.id} className="flex gap-3 py-1 text-xs border-b border-slate-50">
-                    <span className="font-mono w-20 shrink-0">{formatFecha(m.fecha)}</span>
-                    <span className="flex-1 truncate">
-                      {m.concepto}
-                      {m.arrastrado && <span className="ml-2 text-[10px] text-[#b39656] font-semibold">periodo ant.</span>}
-                    </span>
-                    <span className="font-mono tabular-nums w-28 text-right">{formatMoneda(m[s.campo])}</span>
-                    <span className="w-28" />
-                  </div>
-                ))}
-                <div className="flex gap-3 py-1.5 text-xs font-bold">
-                  <span className="flex-1">Total</span>
-                  <span className="font-mono tabular-nums w-28 text-right">{formatMoneda(s.total)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-        <div className="mt-5 border-t border-slate-300 pt-3 space-y-1">
-          <FilaReporte etiqueta="Saldo conciliado" valor={reporte.saldoConciliado} fuerte />
-          <FilaReporte etiqueta="Saldo según libros" valor={reporte.saldoLibros} />
-          <FilaReporte
-            etiqueta={cuadra ? 'Diferencia (conciliación cuadrada)' : 'Diferencia por aclarar'}
-            valor={reporte.diferencia}
-            fuerte
-            color={cuadra ? 'text-emerald-700' : 'text-red-600'}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FilaReporte({ etiqueta, valor, fuerte, color }: { etiqueta: string; valor: number; fuerte?: boolean; color?: string }) {
-  return (
-    <div className={`flex justify-between px-2 py-1 ${fuerte ? 'font-bold' : ''} ${color ?? ''}`}>
-      <span>{etiqueta}</span>
-      <span className="font-mono tabular-nums">{formatMoneda(valor)}</span>
-    </div>
-  );
-}
-
 function Modal({ titulo, icono, onCerrar, children, ancho = 'max-w-lg' }: { titulo: string; icono?: React.ReactNode; onCerrar: () => void; children: React.ReactNode; ancho?: string }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4" onClick={onCerrar}>
@@ -821,7 +861,7 @@ function ModalProcesar({ periodo, reporte, onCerrar, onConfirmar }: { periodo: P
         <div className="px-6 py-5 space-y-4 text-sm text-slate-700">
           <p>
             Se procesará la conciliación No. {periodo.numero} ({nombrePeriodo(periodo.fechaCorte)}): los <b>{pendientes}</b> movimientos no conciliados
-            se copiarán a la conciliación No. {periodo.numero + 1}, los <b>{conciliados}</b> ya conciliados quedarán sólo en el histórico y se generarán los reportes General y Detallado.
+            se copiarán a la conciliación No. {periodo.numero + 1}, los <b>{conciliados}</b> ya conciliados quedarán sólo en el histórico. La conciliación y el auxiliar de este periodo seguirán disponibles para descargar.
           </p>
           {!cuadra && (
             <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 text-xs">
@@ -843,43 +883,106 @@ function ModalProcesar({ periodo, reporte, onCerrar, onConfirmar }: { periodo: P
   );
 }
 
-function ModalImportar({ origen, onCerrar, onImportar }: { origen: Origen; onCerrar: () => void; onImportar: (texto: string) => void }) {
+function ModalImportar({
+  origen,
+  onCerrar,
+  onImportar,
+  onImportarAuxiliar,
+  onError
+}: {
+  origen: Origen;
+  onCerrar: () => void;
+  onImportar: (texto: string, arrastrado: boolean) => void;
+  onImportarAuxiliar: (archivo: File, arrastrado: boolean) => Promise<void>;
+  onError: (msg: string) => void;
+}) {
   const [texto, setTexto] = useState('');
+  const [arrastrado, setArrastrado] = useState(false);
+  const [leyendo, setLeyendo] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const auxRef = useRef<HTMLInputElement>(null);
   const esLibros = origen === 'libros';
+
+  const cargarArchivo = async (f: File) => {
+    try {
+      setLeyendo(true);
+      if (/\.xlsx$/i.test(f.name)) setTexto(await excelATexto(await f.arrayBuffer()));
+      else setTexto(await f.text());
+    } catch (err) {
+      onError(`No se pudo leer el archivo: ${(err as Error).message}`);
+    } finally {
+      setLeyendo(false);
+    }
+  };
+
   return (
     <Modal titulo={`Importar movimientos de ${esLibros ? 'Libros' : 'Banco'}`} icono={<Upload className="h-5 w-5" />} onCerrar={onCerrar} ancho="max-w-2xl">
       <div className="space-y-3 text-xs">
+        {esLibros && (
+          <div className="rounded-xl border border-[#EED7DC] bg-[#FBF0F3] p-3 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <p className="font-bold text-[#581c2f]">Auxiliar del sistema contable (PDF)</p>
+              <p className="text-slate-600">
+                Carga el reporte <b>&quot;AUXILIARES DEL MES&quot;</b> de la cuenta: se importan pólizas, MOV, fechas, conceptos, cargos/abonos, saldo inicial y la jerarquía de cuentas.
+              </p>
+            </div>
+            <input
+              ref={auxRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={async e => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                setLeyendo(true);
+                await onImportarAuxiliar(f, arrastrado);
+                setLeyendo(false);
+              }}
+            />
+            <button disabled={leyendo} onClick={() => auxRef.current?.click()} className={btnPrimario}>
+              <FileText size={14} /> {leyendo ? 'Leyendo…' : 'Importar auxiliar PDF'}
+            </button>
+          </div>
+        )}
         <p className="text-slate-600">
-          Pega las celdas copiadas de Excel o carga un CSV con las columnas: <b>Fecha, Concepto, Referencia, {esLibros ? 'Cargo, Abono' : 'Abono (depósito), Cargo (retiro)'}</b>.
-          También se acepta una sola columna <b>Importe</b> (positivo = depósito, negativo = retiro). Fechas DD/MM/AAAA o AAAA-MM-DD.
+          {esLibros ? 'O pega' : 'Pega'} las celdas copiadas de Excel, o carga un archivo Excel/CSV, con las columnas: <b>Fecha, Concepto, Referencia, {esLibros ? 'Cargo, Abono' : 'Abono (depósito), Cargo (retiro)'}</b>
+          {esLibros && <> y, opcionalmente, <b>Póliza, Cheque, Beneficiario</b></>}. También se acepta una sola columna <b>Importe</b> (positivo = depósito, negativo = retiro). Fechas DD/MM/AAAA o AAAA-MM-DD.
         </p>
         <textarea
           value={texto}
           onChange={e => setTexto(e.target.value)}
-          rows={10}
+          rows={9}
           placeholder={esLibros
-            ? 'Fecha\tConcepto\tReferencia\tCargo\tAbono\n01/06/2026\tCobro de factura REF-10259\tREF-10259\t12500.00\t\n02/06/2026\tPago de nomina\tREF-11306\t\t39250.00'
-            : 'Fecha\tConcepto\tReferencia\tAbono\tCargo\n01/06/2026\tSPEI recibido REF-10259\tREF-10259\t12500.00\t\n03/06/2026\tComision por manejo\t\t\t348.00'}
+            ? 'Fecha\tConcepto\tPóliza\tCheque\tBeneficiario\tCargo\tAbono\n05/08/2026\tPago a proveedor\tE-21\t1045\tEMPACADORA FRESNO S.A. DE C.V.\t\t3030000.00'
+            : 'Fecha\tConcepto\tReferencia\tAbono\tCargo\n14/08/2026\tTRANSFERENCIA SPEI POLIZA 1005428 - SEGUROS BANORTE\t\t\t35281.85'}
           className={`${inputCls} font-mono text-[11px]`}
         />
+        <label className="flex items-start gap-2 text-slate-700">
+          <input type="checkbox" checked={arrastrado} onChange={e => setArrastrado(e.target.checked)} className="mt-0.5 accent-[#581c2f]" />
+          <span>
+            <b>Son partidas pendientes de periodos anteriores.</b> Úsalo al empezar a usar el módulo para capturar lo que traía tu última conciliación
+            (no afectan el saldo del mes, sólo aparecen como pendientes).
+          </span>
+        </label>
         <div className="flex items-center justify-between">
           <div>
             <input
               ref={fileRef}
               type="file"
-              accept=".csv,.txt,.tsv"
+              accept=".xlsx,.csv,.txt,.tsv"
               className="hidden"
               onChange={async e => {
                 const f = e.target.files?.[0];
-                if (f) setTexto(await f.text());
+                e.target.value = '';
+                if (f) await cargarArchivo(f);
               }}
             />
-            <button onClick={() => fileRef.current?.click()} className={btnSecundario}><FileSpreadsheet size={14} /> Cargar archivo CSV</button>
+            <button disabled={leyendo} onClick={() => fileRef.current?.click()} className={btnSecundario}><FileSpreadsheet size={14} /> Cargar Excel o CSV</button>
           </div>
           <div className="flex gap-2">
             <button onClick={onCerrar} className={btnSecundario}>Cancelar</button>
-            <button disabled={!texto.trim()} onClick={() => onImportar(texto)} className={btnPrimario}><RefreshCw size={14} /> Importar</button>
+            <button disabled={!texto.trim()} onClick={() => onImportar(texto, arrastrado)} className={btnPrimario}><RefreshCw size={14} /> Importar</button>
           </div>
         </div>
       </div>
@@ -891,12 +994,26 @@ function ModalAgregar({ origen, fechaDefault, onCerrar, onAgregar }: {
   origen: Origen;
   fechaDefault: string;
   onCerrar: () => void;
-  onAgregar: (d: { fecha: string; concepto: string; referencia: string; deposito: number; retiro: number }) => void;
+  onAgregar: (d: {
+    fecha: string;
+    concepto: string;
+    referencia: string;
+    deposito: number;
+    retiro: number;
+    poliza?: string;
+    cheque?: string;
+    beneficiario?: string;
+    arrastrado?: boolean;
+  }) => void;
 }) {
   const [fecha, setFecha] = useState(fechaDefault);
   const [concepto, setConcepto] = useState('');
   const [referencia, setReferencia] = useState('');
-  const [tipo, setTipo] = useState<'deposito' | 'retiro'>('deposito');
+  const [poliza, setPoliza] = useState('');
+  const [cheque, setCheque] = useState('');
+  const [beneficiario, setBeneficiario] = useState('');
+  const [arrastrado, setArrastrado] = useState(false);
+  const [tipo, setTipo] = useState<'deposito' | 'retiro'>(origen === 'libros' ? 'retiro' : 'deposito');
   const [importe, setImporte] = useState('');
   const esLibros = origen === 'libros';
   return (
@@ -907,7 +1024,17 @@ function ModalAgregar({ origen, fechaDefault, onCerrar, onAgregar }: {
           e.preventDefault();
           const n = parseFloat(importe.replace(/,/g, ''));
           if (!concepto.trim() || !(n > 0)) return;
-          onAgregar({ fecha, concepto, referencia, deposito: tipo === 'deposito' ? n : 0, retiro: tipo === 'retiro' ? n : 0 });
+          onAgregar({
+            fecha,
+            concepto,
+            referencia: referencia || poliza,
+            deposito: tipo === 'deposito' ? n : 0,
+            retiro: tipo === 'retiro' ? n : 0,
+            poliza: esLibros ? poliza : undefined,
+            cheque: esLibros ? cheque : undefined,
+            beneficiario: esLibros ? beneficiario : undefined,
+            arrastrado
+          });
         }}
       >
         <div className="grid grid-cols-2 gap-3">
@@ -915,15 +1042,26 @@ function ModalAgregar({ origen, fechaDefault, onCerrar, onAgregar }: {
           <Campo label="Tipo *">
             <select value={tipo} onChange={e => setTipo(e.target.value as 'deposito' | 'retiro')} className={inputCls}>
               <option value="deposito">{esLibros ? 'Cargo (depósito)' : 'Abono (depósito)'}</option>
-              <option value="retiro">{esLibros ? 'Abono (retiro)' : 'Cargo (retiro)'}</option>
+              <option value="retiro">{esLibros ? 'Abono (retiro / cheque)' : 'Cargo (retiro)'}</option>
             </select>
           </Campo>
         </div>
         <Campo label="Concepto *"><input required value={concepto} onChange={e => setConcepto(e.target.value)} className={inputCls} /></Campo>
+        {esLibros && (
+          <div className="grid grid-cols-3 gap-3">
+            <Campo label="Póliza"><input value={poliza} onChange={e => setPoliza(e.target.value)} placeholder="E-21" className={inputCls} /></Campo>
+            <Campo label="No. de cheque"><input value={cheque} onChange={e => setCheque(e.target.value)} className={inputCls} /></Campo>
+            <Campo label="Beneficiario"><input value={beneficiario} onChange={e => setBeneficiario(e.target.value)} className={inputCls} /></Campo>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Referencia"><input value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="REF-10000" className={inputCls} /></Campo>
           <Campo label="Importe *"><input required inputMode="decimal" value={importe} onChange={e => setImporte(e.target.value)} className={`${inputCls} font-mono`} /></Campo>
         </div>
+        <label className="flex items-center gap-2 text-slate-700">
+          <input type="checkbox" checked={arrastrado} onChange={e => setArrastrado(e.target.checked)} className="accent-[#581c2f]" />
+          Partida pendiente de un periodo anterior (no afecta el saldo del mes)
+        </label>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onCerrar} className={btnSecundario}>Cancelar</button>
           <button type="submit" className={btnPrimario}>Agregar</button>

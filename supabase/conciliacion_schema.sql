@@ -25,11 +25,11 @@ CREATE POLICY "conciliaciones_all_auth" ON public.conciliaciones_bancarias FOR A
 DROP POLICY IF EXISTS "conciliaciones_all_anon" ON public.conciliaciones_bancarias;
 CREATE POLICY "conciliaciones_all_anon" ON public.conciliaciones_bancarias FOR ALL TO anon USING (true) WITH CHECK (true);
 
--- Un periodo cerrado no puede volver a modificarse
+-- Un periodo cerrado no puede modificarse; sólo puede reabrirse (estado → 'abierto')
 CREATE OR REPLACE FUNCTION public.conciliacion_bloquear_cerrado()
 RETURNS trigger AS $$
 BEGIN
-  IF OLD.estado = 'cerrado' THEN
+  IF OLD.estado = 'cerrado' AND NEW.estado = 'cerrado' AND NEW.data IS DISTINCT FROM OLD.data THEN
     RAISE EXCEPTION 'La conciliación % ya está cerrada y es irreversible', OLD.numero;
   END IF;
   RETURN NEW;

@@ -8,6 +8,7 @@ import {
   nuevoMovimiento,
   parseMovimientosCsv,
   procesarConciliacion,
+  reabrirConciliacion,
   round2,
   saldoFinal,
   totalesLado
@@ -20,6 +21,7 @@ import { nombreArchivoOficial, formatoPorDefecto } from '../formatoOficial';
 import { generarExcelConciliacion } from '../excelOficial';
 import { generarPdfAuxiliar, generarPdfConciliacionOficial, renglonesConcepto } from '../pdfOficial';
 import { analizarAuxiliar, extraerConPdfjs } from '../importarAuxiliar';
+import { combinarPeriodos } from '../store';
 
 async function run() {
   console.log('🧪 Conciliación bancaria\n');
@@ -79,6 +81,30 @@ async function run() {
   assert.ok(julioAuto.movimientos.find(m => m.id === transito.id)!.conciliacionId);
   assert.equal(construirReporte(julioAuto).diferencia, 0);
   console.log('✓ procesar conciliación: cierre irreversible + arrastre de pendientes');
+
+  // 4b. Reabrir: descarta la siguiente (abierta) y deja editable la cerrada
+  {
+    const { reabierto, descartar } = reabrirConciliacion(cerrado, siguiente);
+    assert.equal(reabierto.estado, 'abierto');
+    assert.equal(reabierto.cierre, undefined);
+    assert.equal(descartar?.id, siguiente.id);
+    assert.equal(reabierto.movimientos.length, cerrado.movimientos.length);
+    assert.equal(conciliarAutomatico(reabierto).periodo.estado, 'abierto');
+    const { cerrado: c2 } = procesarConciliacion(siguiente);
+    assert.throws(() => reabrirConciliacion(cerrado, c2), /también está cerrada/);
+    console.log('✓ reabrir una conciliación cerrada por error');
+  }
+
+  // 4c. Guardado: al combinar nube y navegador gana la versión más reciente
+  {
+    const viejo = { ...auto, actualizado: '2026-10-01T10:00:00.000Z' };
+    const nuevo = { ...auto, movimientos: auto.movimientos.slice(0, 3), actualizado: '2026-10-02T10:00:00.000Z' };
+    assert.equal(combinarPeriodos([viejo], [nuevo])[0].movimientos.length, 3);
+    assert.equal(combinarPeriodos([nuevo], [viejo])[0].movimientos.length, 3);
+    const otro = { ...siguiente, actualizado: '2026-10-01T00:00:00.000Z' };
+    assert.equal(combinarPeriodos([viejo], [otro]).length, 2);
+    console.log('✓ guardado: no regresan datos viejos de la nube');
+  }
 
   // 5. Importación CSV (pegado desde Excel con tabulador y formato MX)
   const csv = 'Fecha\tConcepto\tReferencia\tCargo\tAbono\n01/06/2026\tPago de nomina REF-11306\tREF-11306\t\t39,250.00\n02/06/2026\tCobro factura\t\t$12,500.50\t\nxx\tmala\t\t1\t';

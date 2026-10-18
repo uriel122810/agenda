@@ -106,6 +106,8 @@ export interface PeriodoConciliacion {
   /** Datos del formato oficial (encabezados, firmas, jerarquía de cuentas) */
   formato?: import('./formatoOficial').FormatoOficial;
   created_at: string;
+  /** Última modificación (ISO); la pone el almacenamiento al guardar */
+  actualizado?: string;
 }
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
@@ -517,6 +519,28 @@ export function procesarConciliacion(p: PeriodoConciliacion): { cerrado: Periodo
     }))
   });
   return { cerrado, siguiente };
+}
+
+/**
+ * Reabre una conciliación cerrada por error. Sólo procede si la siguiente conciliación
+ * de la cuenta (la que se generó al procesar) sigue abierta: ésta se descarta y la
+ * cerrada vuelve a quedar editable con todos sus movimientos.
+ */
+export function reabrirConciliacion(
+  cerrado: PeriodoConciliacion,
+  siguiente: PeriodoConciliacion | undefined
+): { reabierto: PeriodoConciliacion; descartar: PeriodoConciliacion | null; movimientosPropiosSiguiente: number } {
+  if (cerrado.estado !== 'cerrado') throw new Error('La conciliación ya está abierta.');
+  if (siguiente && siguiente.estado === 'cerrado') {
+    throw new Error(`No se puede reabrir: la conciliación No. ${siguiente.numero} también está cerrada. Reabre primero la más reciente.`);
+  }
+  const { cierre: _c, ...resto } = cerrado;
+  void _c;
+  return {
+    reabierto: { ...resto, estado: 'abierto' },
+    descartar: siguiente ?? null,
+    movimientosPropiosSiguiente: siguiente ? siguiente.movimientos.filter(m => !m.arrastrado).length : 0
+  };
 }
 
 // ── Importación CSV ───────────────────────────────────────────────────────────

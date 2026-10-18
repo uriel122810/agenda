@@ -18,6 +18,8 @@ export interface TextoPdf {
   top: number;
   /** tamaño de fuente en pt */
   size: number;
+  /** ancho del fragmento en pt (si el PDF lo informa) */
+  w?: number;
 }
 
 export interface AuxiliarImportado {
@@ -223,11 +225,11 @@ export async function extraerConPdfjs(doc: DocPdfjs): Promise<TextoPdf[][]> {
     const contenido = await page.getTextContent();
     const items: TextoPdf[] = [];
     for (const raw of contenido.items) {
-      const it = raw as { str?: string; transform?: number[] };
+      const it = raw as { str?: string; transform?: number[]; width?: number };
       if (!it.str || !it.transform) continue;
       const size = Math.hypot(it.transform[2], it.transform[3]) || it.transform[0];
       const base = it.transform[5];
-      items.push({ str: it.str, x: it.transform[4], top: alto - base - 0.843 * size, size });
+      items.push({ str: it.str, x: it.transform[4], top: alto - base - 0.843 * size, size, w: it.width });
     }
     paginas.push(items);
   }

@@ -8,11 +8,11 @@ import {
 import {
   agregarMovimientos, conciliarAutomatico, conciliarManual, construirReporte, crearPeriodo,
   desconciliar, desconciliarTodo, eliminarMovimiento, formatFecha, formatMoneda, neto,
-  nombrePeriodo, nuevoMovimiento, parseMovimientosCsv, procesarConciliacion, round2,
+  nombrePeriodo, nuevoMovimiento, parseMovimientosCsv, procesarConciliacion, reabrirConciliacion, round2,
   saldoFinal, totalesLado, type CriteriosConciliacion, type Movimiento, type Origen,
   type PeriodoConciliacion, type ReporteConciliacion
 } from '@/lib/conciliacion/engine';
-import { deleteConciliacion, fetchConciliaciones, saveConciliaciones } from '@/lib/conciliacion/store';
+import { deleteConciliacion, fetchConciliaciones, leerConciliacionesLocales, saveConciliaciones } from '@/lib/conciliacion/store';
 import { crearPeriodoDemo } from '@/lib/conciliacion/demo';
 import { cargarRecursosNavegador, descargarArchivo } from '@/lib/conciliacion/assets';
 import { formatoDe, formatoPorDefecto, nombreArchivoOficial, type FormatoOficial } from '@/lib/conciliacion/formatoOficial';
@@ -66,24 +66,34 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
     setTimeout(() => setToast(null), 4500);
   };
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
+  // ── Carga inicial: primero lo guardado en este navegador, luego se combina con la nube ──
   useEffect(() => {
-    (async () => {
-      const [ps, bs] = await Promise.all([fetchConciliaciones(), fetchBancos()]);
-      setPeriodos(ps);
-      setBancos(bs);
+    const elegir = (ps: PeriodoConciliacion[]) => {
       const abierto = [...ps].reverse().find(p => p.estado === 'abierto') ?? ps[ps.length - 1];
       if (abierto) {
-        setCuentaId(abierto.cuentaId);
-        setPeriodoId(abierto.id);
+        setCuentaId(prev => prev || abierto.cuentaId);
+        setPeriodoId(prev => (prev && ps.some(p => p.id === prev) ? prev : abierto.id));
       }
+    };
+    const locales = leerConciliacionesLocales();
+    if (locales.length) {
+      setPeriodos(locales);
+      elegir(locales);
+      setCargando(false);
+    }
+    (async () => {
+      const [{ periodos: ps, resincronizados }, bs] = await Promise.all([fetchConciliaciones(), fetchBancos()]);
+      setPeriodos(ps);
+      setBancos(bs);
+      elegir(ps);
+      if (resincronizados) console.info(`${resincronizados} conciliación(es) se volvieron a sincronizar con la nube.`);
       setCargando(false);
     })();
   }, []);
 
   const cuentas = useMemo(() => {
     const map = new Map<string, string>();
-    periodos.forEach(p => map.set(p.cuentaId, `${p.banco} ${p.cuenta}`));
+    periodos.forEach(p => map.set(p.cuentaId, `${p.banco} ${p.cuenta}${p.cuentaId.startsWith('demo-') ? ' (datos de ejemplo)' : ''}`));
     return [...map.entries()];
   }, [periodos]);
 
@@ -97,13 +107,29 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
 
   const limpiarSeleccion = () => setSel({ libros: new Set(), banco: new Set() });
 
+  /** Guarda en el navegador y en la nube; avisa si la nube rechaza el guardado */
+  const guardar = (lista: PeriodoConciliacion[]) => {
+    void saveConciliaciones(lista).then(error => {
+      if (error) {
+        setTimeout(
+          () =>
+            notificar(
+              `Los cambios quedaron guardados en este navegador, pero la nube (Supabase) los rechazó: ${error}. Ejecuta de nuevo supabase/conciliacion_schema.sql.`,
+              true
+            ),
+          4700
+        );
+      }
+    });
+  };
+
   /** Aplica un cambio al periodo activo y lo persiste */
   const aplicar = (fn: (p: PeriodoConciliacion) => PeriodoConciliacion, okMsg?: string) => {
     if (!periodo) return;
     try {
       const nuevo = fn(periodo);
       setPeriodos(prev => prev.map(p => (p.id === nuevo.id ? nuevo : p)));
-      void saveConciliaciones([nuevo]);
+      guardar([nuevo]);
       if (okMsg) notificar(okMsg);
       return nuevo;
     } catch (err) {
@@ -146,16 +172,47 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
     try {
       const { cerrado: c, siguiente } = procesarConciliacion(periodo);
       setPeriodos(prev => [...prev.map(p => (p.id === c.id ? c : p)), siguiente]);
-      void saveConciliaciones([c, siguiente]);
+      guardar([c, siguiente]);
       void logAuditOperation({
         modulo: 'Bancos',
         accion: `Se procesó la conciliación No. ${c.numero} de ${c.banco} ${c.cuenta}`,
         detalles: `${c.cierre!.conciliados} conciliados • ${c.cierre!.pendientesArrastrados} pendientes arrastrados a la No. ${siguiente.numero}`
       });
-      setPeriodoId(siguiente.id);
+      // Se queda en la conciliación recién cerrada para descargar sus documentos
+      setPeriodoId(c.id);
+      setVista('conciliacion');
       setModal(null);
       limpiarSeleccion();
-      notificar(`Conciliación No. ${c.numero} cerrada. Se abrió la No. ${siguiente.numero} con ${siguiente.movimientos.length} pendientes.`);
+      notificar(`Conciliación No. ${c.numero} cerrada. Descarga aquí sus documentos; la No. ${siguiente.numero} quedó abierta con ${siguiente.movimientos.length} pendientes.`);
+    } catch (err) {
+      notificar((err as Error).message, true);
+    }
+  };
+
+  /** Conciliación abierta más reciente de la cuenta (a donde ir después de cerrar) */
+  const abiertaDeCuenta = periodo ? periodos.find(p => p.cuentaId === periodo.cuentaId && p.estado === 'abierto') : undefined;
+  const siguienteDe = (p: PeriodoConciliacion) => periodos.find(x => x.cuentaId === p.cuentaId && x.numero === p.numero + 1);
+
+  const onReabrir = async () => {
+    if (!periodo || !cerrado) return;
+    try {
+      const sig = siguienteDe(periodo);
+      const { reabierto, descartar, movimientosPropiosSiguiente } = reabrirConciliacion(periodo, sig);
+      const aviso = descartar
+        ? `\n\nSe eliminará la conciliación No. ${descartar.numero} que se generó al procesar${
+            movimientosPropiosSiguiente ? `, incluidos ${movimientosPropiosSiguiente} movimientos que ya le habías capturado` : ''
+          }; al volver a procesar se genera de nuevo.`
+        : '';
+      if (!confirm(`¿Reabrir la conciliación No. ${periodo.numero} para corregirla?${aviso}`)) return;
+      if (descartar) {
+        const err = await deleteConciliacion(descartar.id);
+        if (err) notificar(`No se pudo eliminar la No. ${descartar.numero} en la nube: ${err}`, true);
+      }
+      setPeriodos(prev => prev.filter(p => p.id !== descartar?.id).map(p => (p.id === reabierto.id ? reabierto : p)));
+      guardar([reabierto]);
+      setVista('seguimiento');
+      void logAuditOperation({ modulo: 'Bancos', accion: `Se reabrió la conciliación No. ${reabierto.numero} de ${reabierto.banco} ${reabierto.cuenta}`, status: 'advertencia' });
+      notificar(`Conciliación No. ${reabierto.numero} reabierta. Ya puedes corregirla y volver a procesarla.`);
     } catch (err) {
       notificar((err as Error).message, true);
     }
@@ -271,7 +328,7 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
       formato: nuevoBase.formato ?? (previo?.formato ? { ...previo.formato, fechaElaboracion: undefined } : formatoPorDefecto(nuevoBase))
     };
     setPeriodos(prev => [...prev, nuevo]);
-    void saveConciliaciones([nuevo]);
+    guardar([nuevo]);
     setCuentaId(nuevo.cuentaId);
     setPeriodoId(nuevo.id);
     setModal(null);
@@ -339,6 +396,9 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
                 {cerrado ? 'Cerrada' : 'Abierta'}
               </span>
             )}
+            {periodo?.cuentaId.startsWith('demo-') && (
+              <span className="rounded-full px-2.5 py-0.5 text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200">Datos de ejemplo</span>
+            )}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Concilia Libros contra el Estado de Cuenta, cierra el periodo arrastrando pendientes y genera la conciliación y el auxiliar en el formato oficial (Excel y PDF).
@@ -394,7 +454,7 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
               <button disabled={cerrado} onClick={onDesconciliarTodo} className={btnSecundario}><Unlink size={14} /> Des-conciliar todo</button>
             </Grupo>
             <Grupo titulo="Proceso">
-              <button disabled={cerrado} onClick={() => setModal('procesar')} className={btnPrimario}><Lock size={14} /> Procesar conciliación</button>
+              <button disabled={cerrado} title={cerrado ? 'Esta conciliación ya está cerrada' : undefined} onClick={() => setModal('procesar')} className={btnPrimario}><Lock size={14} /> Procesar conciliación</button>
             </Grupo>
             <Grupo titulo="Formato oficial">
               <button disabled={!!generando} onClick={() => descargar('excel')} className={btnSecundario}>
@@ -413,6 +473,32 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
               </button>
             )}
           </div>
+
+          {cerrado && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 flex flex-wrap items-center gap-3">
+              <Lock size={16} className="shrink-0" />
+              <div className="flex-1 min-w-[260px]">
+                <p className="font-bold">
+                  Estás viendo la conciliación No. {periodo.numero} ({nombrePeriodo(periodo.fechaCorte)}), que ya está cerrada
+                  {periodo.cierre ? ` desde el ${new Date(periodo.cierre.fechaCierre).toLocaleDateString('es-MX')}` : ''}.
+                </p>
+                <p>
+                  Por eso no se puede volver a procesar ni editar. Puedes descargar sus documentos (Excel y PDF) con los botones de &quot;Formato oficial&quot;
+                  {abiertaDeCuenta ? `, continuar en la No. ${abiertaDeCuenta.numero} (abierta)` : ''} o reabrirla si la cerraste por error.
+                </p>
+              </div>
+              {abiertaDeCuenta && (
+                <button onClick={() => { setPeriodoId(abiertaDeCuenta.id); limpiarSeleccion(); }} className={btnPrimario}>
+                  Ir a la No. {abiertaDeCuenta.numero} (abierta)
+                </button>
+              )}
+              {(!siguienteDe(periodo) || siguienteDe(periodo)!.estado === 'abierto') && (
+                <button onClick={onReabrir} className={btnSecundario}>
+                  <Unlink size={14} /> Reabrir esta conciliación
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Indicadores */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -447,11 +533,6 @@ export default function ConciliacionBancaria({ searchQuery = '' }: { searchQuery
 
           {vista === 'seguimiento' && (
             <>
-              {cerrado && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600 flex items-center gap-2">
-                  <Lock size={14} /> Conciliación cerrada el {new Date(periodo.cierre!.fechaCierre).toLocaleDateString('es-MX')}. Sólo lectura.
-                </div>
-              )}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {(['libros', 'banco'] as const).map(origen => (
                   <PanelMovimientos
@@ -869,6 +950,9 @@ function ModalProcesar({ periodo, reporte, onCerrar, onConfirmar }: { periodo: P
   const pendientes = periodo.movimientos.filter(m => !m.conciliacionId).length;
   const conciliados = periodo.movimientos.length - pendientes;
   const cuadra = Math.abs(reporte.diferencia) < 0.005;
+  const mesCorte = periodo.fechaCorte.slice(0, 7);
+  const fueraDeMes = periodo.movimientos.filter(m => !m.arrastrado && m.fecha.slice(0, 7) !== mesCorte);
+  const esEjemplo = periodo.cuentaId.startsWith('demo-');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4" onClick={onCerrar}>
       <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-[#FFF8F1] shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -881,6 +965,17 @@ function ModalProcesar({ periodo, reporte, onCerrar, onConfirmar }: { periodo: P
             Se procesará la conciliación No. {periodo.numero} ({nombrePeriodo(periodo.fechaCorte)}): los <b>{pendientes}</b> movimientos no conciliados
             se copiarán a la conciliación No. {periodo.numero + 1}, los <b>{conciliados}</b> ya conciliados quedarán sólo en el histórico. La conciliación y el auxiliar de este periodo seguirán disponibles para descargar.
           </p>
+          {fueraDeMes.length > 0 && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 text-xs">
+              <b>{fueraDeMes.length} movimiento(s) no son de {nombrePeriodo(periodo.fechaCorte)}</b> (por ejemplo del {formatFecha(fueraDeMes[0].fecha)}).
+              Revisa que estés en la conciliación del mes correcto antes de cerrar.
+            </p>
+          )}
+          {esEjemplo && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 text-xs">
+              Esta es la cuenta de <b>datos de ejemplo</b>. Para tus conciliaciones reales crea una con <b>Nueva conciliación</b>.
+            </p>
+          )}
           {!cuadra && (
             <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 text-xs">
               La conciliación tiene una diferencia de <b>${formatMoneda(reporte.diferencia)}</b> sin aclarar. Revisa los saldos iniciales o los movimientos antes de cerrar.
